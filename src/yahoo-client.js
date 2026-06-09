@@ -109,8 +109,30 @@ async function fetchCandles(symbol, interval, range) {
   };
 }
 
+// Lightweight current-price lookup (for valuing portfolio positions that aren't
+// the actively-streamed ticker). Returns { price, prevClose } or throws.
+async function fetchPrice(symbol) {
+  const url =
+    'https://query1.finance.yahoo.com/v8/finance/chart/' +
+    encodeURIComponent(symbol) +
+    '?interval=1d&range=1d';
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) throw new Error('Yahoo HTTP ' + res.status);
+  const j = await res.json();
+  const meta = j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].meta;
+  if (!meta || typeof meta.regularMarketPrice !== 'number') {
+    throw new Error('no price');
+  }
+  return {
+    price: meta.regularMarketPrice,
+    prevClose: (typeof meta.chartPreviousClose === 'number' ? meta.chartPreviousClose
+      : (typeof meta.previousClose === 'number' ? meta.previousClose : null)),
+  };
+}
+
 module.exports = {
   fetchCandles,
+  fetchPrice,
   isIntraday,
   normInterval,
   normRange,

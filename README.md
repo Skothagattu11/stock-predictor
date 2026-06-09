@@ -17,6 +17,7 @@ browser over WebSocket and auto-refreshed.
 - **Range** (lookback): 1D / 5D / 1M / 3M / 6M / YTD / 1Y / 5Y / Max — auto-clamped to what each interval supports.
 - **Candles ↔ Line** chart toggle, with a **color legend** (EMA 9/20/50, Bollinger Bands, volume, up/down candles).
 - **Collapsible market-news** section (company + market headlines) that refreshes per ticker.
+- **Personalized position tracker:** enter your buy price per share (and optionally amount invested) per ticker — get live P/L and a position-aware call (**HOLD / SELL-trim / BUY-more / TAKE-PROFIT / CUT-LOSS**) that combines the signal, your P/L, and the stop/target levels. Multi-ticker **portfolio** with live totals (saved in your browser).
 - Patterns and signals run on **real OHLCV**, not synthetic data, so the analysis is meaningful.
 - **Enhanced rules engine** (`engine/`):
   - Indicators: EMA 9/20/50, RSI 14, MACD (12/26/9), Bollinger Bands (20,2), ATR 14, VWAP, volume ratio.

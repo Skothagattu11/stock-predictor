@@ -5,6 +5,7 @@
 
 const express = require('express');
 const config = require('./config');
+const yahoo = require('./yahoo-client');
 
 const FINNHUB_REST = 'https://finnhub.io/api/v1';
 
@@ -149,6 +150,19 @@ function createRouter() {
       return res.json(items);
     } catch (err) {
       return res.status(502).json({ error: 'News request failed', detail: String(err && err.message || err) });
+    }
+  });
+
+  // GET /api/price/:symbol -> { price, prevClose }  (Yahoo, real, no key)
+  // Used to value portfolio positions for tickers that aren't being streamed.
+  router.get('/price/:symbol', async (req, res) => {
+    const symbol = String(req.params.symbol || '').trim().toUpperCase();
+    if (!symbol) return res.status(400).json({ error: 'symbol required' });
+    try {
+      const p = await yahoo.fetchPrice(symbol);
+      return res.json(p);
+    } catch (err) {
+      return res.status(502).json({ error: 'Price request failed', detail: String(err && err.message || err) });
     }
   });
 

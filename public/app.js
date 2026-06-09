@@ -204,6 +204,12 @@
       }
       state.lastSignalLabel = label;
     }
+
+    // personalized position tracking uses the latest analysis + live price
+    state.lastAnalysis = analysis;
+    if (isFinite(analysis.price)) priceMap[state.symbol] = analysis.price;
+    renderPositionCard();
+    renderPortfolio();
   }
 
   function addHistory(label, cls) {
@@ -451,11 +457,14 @@
     send({ type: 'unsubscribe' });
     state.symbol = symbol;
     state.lastSignalLabel = null;
+    state.lastAnalysis = null; // avoid showing the old ticker's signal for the new one
     setText('symbolPill', symbol);
     clearChart();
     subscribe();
     if (state.simulate) send({ type: 'simulate', on: true });
     fetchNews(symbol);
+    renderPositionCard();
+    renderPortfolio();
     searchInput.value = '';
     hideResults();
   }
@@ -532,10 +541,206 @@
     $('csv').value = '09:30,300,304,298,302,1200000\n09:35,302,303,295,296,1800000\n09:40,296,298,289,294,2200000\n09:45,294,296,286,295,2500000\n09:50,295,304,293,303,3200000';
   });
 
+  // ---------- Personalized position tracking (localStorage) ----------
+  var PORTFOLIO_KEY = 'csd_portfolio_v1';
+  var priceMap = {}; // symbol -> latest price (active ticker via stream, others via /api/price)
+
+  function loadPortfolio() {
+    try { return JSON.parse(localStorage.getItem(PORTFOLIO_KEY)) || []; }
+    catch (e) { return []; }
+  }
+  function savePortfolio(arr) {
+    try { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(arr)); } catch (e) {}
+  }
+  function getPosition(symbol) {
+    return loadPortfolio().filter(function (p) { return p.symbol === symbol; })[0] || null;
+  }
+  function upsertPosition(symbol, shares, cost) {
+    var arr = loadPortfolio().filter(function (p) { return p.symbol !== symbol; });
+    arr.push({ symbol: symbol, shares: shares, cost: cost });
+    savePortfolio(arr);
+  }
+  function removePosition(symbol) {
+    savePortfolio(loadPortfolio().filter(function (p) { return p.symbol !== symbol; }));
+  }
+  function fmtShares(n) {
+    if (!isFinite(n)) return '--';
+    return (Math.round(n * 10000) / 10000).toString(); // up to 4 dp, trailing zeros trimmed
+  }
+  function currentPrice(symbol) {
+    if (symbol === state.symbol && state.lastAnalysis && isFinite(state.lastAnalysis.price)) {
+      return state.lastAnalysis.price;
+    }
+    return priceMap[symbol];
+  }
+
+  // Personalized call = engine signal + your P/L + your entry vs stop/target.
+  function computeRecommendation(analysis, pos) {
+    var price = analysis && isFinite(analysis.price) ? analysis.price : currentPrice(pos.symbol);
+    var lv = (analysis && analysis.levels) || {};
+    var sig = analysis && analysis.signal;
+    // P/L% needs an average cost; null when the user only entered shares.
+    var hasCost = pos.cost > 0 && isFinite(price);
+    var plPct = hasCost ? (price - pos.cost) / pos.cost * 100 : null;
+    var reasons = [];
+    var action = 'HOLD', cls = 'wait';
+
+    if (lv.stopLoss && isFinite(price) && price <= lv.stopLoss) {
+      action = 'CUT LOSS'; cls = 'sell';
+      reasons.push('Price ($' + price.toFixed(2) + ') is at/below the stop-loss zone ($' + lv.stopLoss.toFixed(2) + ').');
+    } else if (lv.sellTarget && isFinite(price) && price >= lv.sellTarget) {
+      action = 'TAKE PROFIT'; cls = 'sell';
+      reasons.push('Price reached the target zone ($' + lv.sellTarget.toFixed(2) + ') — consider locking gains.');
+    } else if (sig === 'SELL') {
+      cls = 'sell';
+      if (plPct === null) { action = 'SELL / REDUCE'; reasons.push('Bearish signal — consider trimming or waiting for stabilization.'); }
+      else if (plPct >= 0) { action = 'SELL / TRIM'; reasons.push('Bearish signal while you are up ' + plPct.toFixed(1) + '% — consider trimming to protect gains.'); }
+      else { action = 'REDUCE / TIGHTEN STOP'; reasons.push('Bearish signal and you are down ' + Math.abs(plPct).toFixed(1) + '% — consider cutting or tightening your stop.'); }
+    } else if (sig === 'BUY') {
+      cls = 'buy';
+      action = (plPct !== null && plPct < 0) ? 'HOLD / ADD' : 'HOLD';
+      reasons.push('Bullish signal — the trend supports holding' + (plPct !== null && plPct < 0 ? '; only average down with a defined risk plan.' : '.'));
+      if (lv.buyTrigger && isFinite(price) && price < lv.buyTrigger) reasons.push('Adds are cleaner once price holds above the buy trigger ($' + lv.buyTrigger.toFixed(2) + ').');
+    } else {
+      action = 'HOLD'; cls = 'wait';
+      reasons.push('No strong edge right now — hold and watch the next few candles.');
+    }
+    if (plPct !== null) {
+      reasons.push((plPct >= 0 ? 'You are up ' : 'You are down ') + Math.abs(plPct).toFixed(2) + '% on this position.');
+    } else if (pos.cost <= 0) {
+      reasons.push('Add your average cost to see P/L % for this position.');
+    }
+    if (analysis && analysis.signalLabel) reasons.push('Chart signal: ' + analysis.signalLabel + ' (' + (analysis.score | 0) + '/100).');
+    return { action: action, cls: cls, reasons: reasons };
+  }
+
+  function renderPositionCard() {
+    var sym = state.symbol;
+    setText('posSymbol', sym);
+    var pos = getPosition(sym);
+    var amountEl = $('posAmount'), costEl = $('posCost');
+    var amountVal = (pos && pos.shares > 0 && pos.cost > 0) ? +(pos.shares * pos.cost).toFixed(2) : '';
+    if (pos) {
+      if (document.activeElement !== costEl) costEl.value = pos.cost || '';
+      if (document.activeElement !== amountEl) amountEl.value = amountVal;
+    } else {
+      if (document.activeElement !== costEl) costEl.value = '';
+      if (document.activeElement !== amountEl) amountEl.value = '';
+    }
+    var hasPos = pos && (pos.shares > 0 || pos.cost > 0);
+    $('posResult').classList.toggle('hidden', !hasPos);
+    $('posEmpty').style.display = hasPos ? 'none' : '';
+    $('posRemove').style.display = pos ? '' : 'none';
+    if (!hasPos) return;
+
+    var price = currentPrice(sym);
+    var hasShares = pos.shares > 0, hasCost = pos.cost > 0;
+    var basis = (hasShares && hasCost) ? pos.shares * pos.cost : null;
+    var value = (hasShares && isFinite(price)) ? pos.shares * price : null;
+    setText('posBasis', basis != null ? '$' + basis.toFixed(2) : '--');
+    setText('posValue', value != null ? '$' + value.toFixed(2) : '--');
+    var plEl = $('posPL');
+    if (basis != null && value != null) {
+      var pl = value - basis, plPct = pl / basis * 100;
+      plEl.textContent = (pl >= 0 ? '+$' : '-$') + Math.abs(pl).toFixed(2) + ' (' + (pl >= 0 ? '+' : '') + plPct.toFixed(2) + '%)';
+      plEl.className = pl >= 0 ? 'pos' : 'neg';
+    } else if (hasCost && isFinite(price)) {
+      var pct = (price - pos.cost) / pos.cost * 100;
+      plEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+      plEl.className = pct >= 0 ? 'pos' : 'neg';
+    } else {
+      plEl.textContent = '--'; plEl.className = '';
+    }
+    if (state.lastAnalysis) {
+      var rec = computeRecommendation(state.lastAnalysis, pos);
+      $('posRecBox').className = 'posRecBox ' + rec.cls;
+      setText('posRec', rec.action);
+      $('posReasons').innerHTML = rec.reasons.slice(0, 5).map(function (r) { return '<div>' + escapeHtml(r) + '</div>'; }).join('');
+    }
+  }
+
+  function renderPortfolio() {
+    var arr = loadPortfolio();
+    var tbody = $('portfolioRows');
+    if (!arr.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">No positions yet. Add one in “Your position” above.</td></tr>';
+      setText('portfolioTotal', '');
+      return;
+    }
+    var totBasis = 0, totVal = 0, anyDollar = false;
+    tbody.innerHTML = arr.map(function (p) {
+      var price = currentPrice(p.symbol);
+      var hasShares = p.shares > 0, hasCost = p.cost > 0;
+      var basis = (hasShares && hasCost) ? p.shares * p.cost : null;
+      var value = (hasShares && isFinite(price)) ? p.shares * price : null;
+      var pl = (basis != null && value != null) ? value - basis : null;
+      var plPct = (hasCost && isFinite(price)) ? (price - p.cost) / p.cost * 100 : null;
+      if (value != null && basis != null) { totVal += value; totBasis += basis; anyDollar = true; }
+      var plCls = pl != null ? (pl >= 0 ? 'pos' : 'neg') : (plPct != null ? (plPct >= 0 ? 'pos' : 'neg') : '');
+      var plTxt = pl != null ? ((pl >= 0 ? '+$' : '-$') + Math.abs(pl).toFixed(2)) : '--';
+      var plPctTxt = plPct != null ? ((plPct >= 0 ? '+' : '') + plPct.toFixed(2) + '%') : '--';
+      return '<tr data-sym="' + escapeHtml(p.symbol) + '">' +
+        '<td><b>' + escapeHtml(p.symbol) + '</b></td>' +
+        '<td>' + (hasShares ? fmtShares(p.shares) : '--') + '</td>' +
+        '<td>' + (hasCost ? ('$' + (+p.cost).toFixed(2)) : '--') + '</td>' +
+        '<td>' + (isFinite(price) ? ('$' + price.toFixed(2)) : '--') + '</td>' +
+        '<td>' + (value != null ? '$' + value.toFixed(2) : '--') + '</td>' +
+        '<td class="' + plCls + '">' + plTxt + '</td>' +
+        '<td class="' + plCls + '">' + plPctTxt + '</td>' +
+        '<td class="x"><button title="Remove" data-rm="' + escapeHtml(p.symbol) + '">✕</button></td>' +
+        '</tr>';
+    }).join('');
+    if (anyDollar) {
+      var totPl = totVal - totBasis; var totPct = totBasis > 0 ? totPl / totBasis * 100 : 0;
+      var cls = totPl >= 0 ? 'pos' : 'neg';
+      $('portfolioTotal').innerHTML = 'Total value $' + totVal.toFixed(2) + ' &nbsp;·&nbsp; <span class="' + cls + '">' +
+        (totPl >= 0 ? '+$' : '-$') + Math.abs(totPl).toFixed(2) + ' (' + (totPl >= 0 ? '+' : '') + totPct.toFixed(2) + '%)</span>';
+    } else { setText('portfolioTotal', ''); }
+  }
+
+  function refreshPortfolioPrices() {
+    loadPortfolio().forEach(function (p) {
+      if (p.symbol === state.symbol) return; // active ticker is priced live via the stream
+      fetch('/api/price/' + encodeURIComponent(p.symbol))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { if (d && isFinite(d.price)) { priceMap[p.symbol] = d.price; renderPortfolio(); } })
+        .catch(function () {});
+    });
+  }
+
+  $('posSave').addEventListener('click', function () {
+    var price = parseFloat($('posCost').value);   // buy price per share
+    var amount = parseFloat($('posAmount').value); // total invested (optional)
+    if (!(price > 0)) {
+      showBanner(amount > 0
+        ? 'Also enter your buy price per share so we can estimate shares & P/L.'
+        : 'Enter your buy price per share (and optionally the amount invested).');
+      return;
+    }
+    var shares = amount > 0 ? amount / price : 0; // shares = amount ÷ price
+    upsertPosition(state.symbol, shares, price);
+    renderPositionCard(); renderPortfolio(); refreshPortfolioPrices();
+  });
+  $('posRemove').addEventListener('click', function () {
+    removePosition(state.symbol);
+    $('posAmount').value = ''; $('posCost').value = '';
+    renderPositionCard(); renderPortfolio();
+  });
+  $('portfolioRows').addEventListener('click', function (e) {
+    var rm = e.target.getAttribute && e.target.getAttribute('data-rm');
+    if (rm) { e.stopPropagation(); removePosition(rm); renderPositionCard(); renderPortfolio(); return; }
+    var tr = e.target.closest && e.target.closest('tr[data-sym]');
+    if (tr && tr.getAttribute('data-sym')) selectSymbol(tr.getAttribute('data-sym'));
+  });
+
   // ---------- Boot ----------
   setConnBadge(false);
   setModeBadge('simulated');
   syncViewSelects();
   applyChartType();
+  renderPositionCard();
+  renderPortfolio();
+  refreshPortfolioPrices();
+  setInterval(refreshPortfolioPrices, 30000);
   connect();
 })();

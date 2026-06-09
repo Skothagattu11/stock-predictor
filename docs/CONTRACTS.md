@@ -110,8 +110,18 @@ GET /api/search?q=<text>   -> [{ symbol, description }]      (proxy Finnhub /sea
 GET /api/quote/:symbol     -> { c, h, l, o, pc }              (proxy Finnhub /quote; mock if no key)
 GET /api/news/:symbol      -> [{ headline, source, url, datetime, summary, image }]
                              (Finnhub company-news w/ key; Yahoo news fallback)
+GET /api/price/:symbol     -> { price, prevClose }   (Yahoo, real, no key; values portfolio)
 GET /api/health            -> { ok:true, mode, hasKey }
 ```
+
+## Personalized positions (client-side)
+
+Positions live in the browser (`localStorage` key `csd_portfolio_v1`) as
+`[{ symbol, shares, cost }]` where `cost` is the buy price per share and
+`shares = amountInvested / cost`. P/L and a position-aware recommendation
+(HOLD / SELL-TRIM / BUY-more / TAKE-PROFIT / CUT-LOSS) are computed in the
+browser from the live analysis (signal + levels) and the user's entry. No server
+storage / auth.
 
 Candles come from Yahoo Finance (`src/yahoo-client.js`) — real OHLCV, no key needed.
 

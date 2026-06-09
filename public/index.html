@@ -28,8 +28,8 @@
     .pill.live{border-color:rgba(47,209,124,.4);color:#bff2d6}.pill.live .dot{background:var(--green)}
     .pill.sim{border-color:rgba(90,167,255,.4);color:#cfe2ff}.pill.sim .dot{background:var(--blue)}
     .pill.closed{border-color:rgba(255,191,71,.4);color:#ffe6b8}.pill.closed .dot{background:var(--amber)}
-    .grid{display:grid;grid-template-columns:2fr .9fr;gap:18px;align-items:stretch}
-    .chartCard{display:flex;flex-direction:column;flex:1 1 auto;min-width:0}
+    .grid{display:grid;grid-template-columns:2fr .9fr;gap:18px;align-items:start}
+    .chartCard{display:flex;flex-direction:column;min-width:0}
     .card{background:linear-gradient(180deg,rgba(17,27,45,.92),rgba(10,16,27,.92));border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
     .card h2,.card h3{margin:0}
     .cardHead{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line);gap:14px;flex-wrap:wrap}
@@ -54,7 +54,7 @@
     .kpi span{display:block;color:var(--muted);font-size:12px}
     .kpi b{display:block;font-size:22px;margin-top:6px}
     .green{color:var(--green)}.red{color:var(--red)}.amber{color:var(--amber)}.blue{color:var(--blue)}
-    #chart{flex:1 1 auto;min-height:560px;min-width:0}
+    #chart{height:52vh;min-height:360px;max-height:600px;min-width:0}
     .legend{display:flex;flex-wrap:wrap;gap:8px 16px;padding:11px 20px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
     .legend .lg{display:inline-flex;align-items:center;gap:7px}
     .legend i{width:16px;height:3px;border-radius:2px;display:inline-block;flex:0 0 auto}
@@ -88,6 +88,38 @@
     .history .hrow{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);font-size:13px}
     .history .ts{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
     .history .empty{color:var(--muted);font-size:13px;padding:8px}
+    /* personalized position card */
+    .posForm{display:grid;gap:10px}
+    .posForm label{display:grid;gap:5px;font-size:12px;color:var(--muted)}
+    .posForm .opt{opacity:.7;font-weight:400}
+    .posForm input{width:100%}
+    .posBtns{display:flex;gap:10px;margin-top:2px}
+    .posBtns .btn{flex:1}
+    .posResult{margin-top:14px;display:grid;gap:12px}
+    .posRecBox{padding:14px;border-radius:16px;background:linear-gradient(135deg,rgba(90,167,255,.12),rgba(47,209,124,.06));border:1px solid rgba(90,167,255,.25)}
+    .posRecBox.buy{background:linear-gradient(135deg,rgba(47,209,124,.14),rgba(90,167,255,.06));border-color:rgba(47,209,124,.3)}
+    .posRecBox.sell{background:linear-gradient(135deg,rgba(255,92,108,.14),rgba(255,191,71,.06));border-color:rgba(255,92,108,.3)}
+    .posRecBox.wait{background:linear-gradient(135deg,rgba(255,191,71,.12),rgba(90,167,255,.05));border-color:rgba(255,191,71,.28)}
+    .posRec{font-size:24px;font-weight:900;letter-spacing:-.03em;margin-top:4px}
+    .posStats b.pos{color:var(--green)} .posStats b.neg{color:var(--red)}
+    /* portfolio table */
+    .tableWrap{overflow-x:auto}
+    .portfolioTable td,.portfolioTable th{white-space:nowrap}
+    .portfolioTable tbody tr{cursor:pointer}
+    .portfolioTable tbody tr:hover td{background:rgba(255,255,255,.03)}
+    .portfolioTable td.pos,.portTotal .pos{color:var(--green)}
+    .portfolioTable td.neg,.portTotal .neg{color:var(--red)}
+    .portfolioTable .x{color:var(--muted);text-align:right}
+    .portfolioTable .x button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:15px;padding:2px 6px;border-radius:8px}
+    .portfolioTable .x button:hover{background:rgba(255,92,108,.15);color:var(--red)}
+    .portfolioCard{padding:0;margin-top:18px}
+    .portfolioCard>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:18px 20px}
+    .portfolioCard[open]>summary{border-bottom:1px solid var(--line)}
+    .portfolioCard>summary::-webkit-details-marker{display:none}
+    .portfolioCard>summary h3{margin:0;display:inline}
+    .portfolioCard .chev{color:var(--muted);transition:transform .2s;font-size:18px}
+    .portfolioCard[open] .chev{transform:rotate(180deg)}
+    .portTotal{margin-top:14px;font-size:15px;font-weight:700;text-align:right}
     /* market news (collapsible) */
     .newsCard{padding:0;margin-top:18px}
     .newsCard>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:18px 20px}
@@ -243,6 +275,33 @@
       </div><!-- /.main -->
 
       <div class="side">
+        <div class="card posCard">
+          <div class="cardHead"><h3>Your position — <span id="posSymbol">MRVL</span></h3></div>
+          <div class="cardBody">
+            <div class="posForm">
+              <label>Buy price / share ($)<input id="posCost" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 300.00" /></label>
+              <label>Amount invested ($) <span class="opt">(optional)</span><input id="posAmount" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 3000" /></label>
+              <div class="posBtns">
+                <button class="btn primary" id="posSave">Save position</button>
+                <button class="btn" id="posRemove">Remove</button>
+              </div>
+              <div class="note">Buy price per share powers the personalized buy/sell/hold call &amp; P/L %. Add the amount invested for dollar P/L (shares = amount ÷ price).</div>
+            </div>
+            <div id="posResult" class="posResult hidden">
+              <div class="posRecBox" id="posRecBox">
+                <div class="note">Personalized call (signal + your P/L + levels)</div>
+                <div class="posRec" id="posRec">HOLD</div>
+              </div>
+              <div class="posStats mini">
+                <div><span>Amount invested</span><b id="posBasis">--</b></div>
+                <div><span>Market value</span><b id="posValue">--</b></div>
+                <div><span>Unrealized P/L</span><b id="posPL">--</b></div>
+              </div>
+              <div class="reason" id="posReasons"></div>
+            </div>
+            <div id="posEmpty" class="note">Enter your buy price per share (and optionally the amount invested) to track profit/loss and get a personalized buy / sell / hold call for this ticker.</div>
+          </div>
+        </div>
         <div class="card">
           <div class="cardBody">
             <div id="signalBox" class="signalBox wait">
@@ -288,6 +347,22 @@
         </div>
       </div>
     </div>
+
+    <details class="card portfolioCard" id="portfolioCard" open>
+      <summary>
+        <span><h3>Portfolio</h3><div class="note">Your holdings &amp; live profit/loss — click a row to load its chart.</div></span>
+        <span class="chev">▾</span>
+      </summary>
+      <div class="cardBody">
+        <div class="tableWrap">
+          <table class="table portfolioTable">
+            <thead><tr><th>Ticker</th><th>Shares</th><th>Avg cost</th><th>Price</th><th>Value</th><th>P/L</th><th>P/L %</th><th></th></tr></thead>
+            <tbody id="portfolioRows"><tr><td colspan="8" class="empty">No positions yet. Add one in “Your position” above.</td></tr></tbody>
+          </table>
+        </div>
+        <div id="portfolioTotal" class="portTotal"></div>
+      </div>
+    </details>
 
     <details class="card newsCard" id="newsCard" open>
       <summary>
