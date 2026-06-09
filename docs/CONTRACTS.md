@@ -117,8 +117,9 @@ GET /api/health            -> { ok:true, mode, hasKey }
 ## Personalized positions (client-side)
 
 Positions live in the browser (`localStorage` key `csd_portfolio_v1`) as
-`[{ symbol, shares, cost }]` where `cost` is the buy price per share and
-`shares = amountInvested / cost`. P/L and a position-aware recommendation
+`[{ symbol, shares, cost }]` where `cost` is the buy price per share. The form
+takes value-per-share + (amount invested OR shares) and derives the third
+(`amount = shares × cost`). P/L and a position-aware recommendation
 (HOLD / SELL-TRIM / BUY-more / TAKE-PROFIT / CUT-LOSS) are computed in the
 browser from the live analysis (signal + levels) and the user's entry. No server
 storage / auth.

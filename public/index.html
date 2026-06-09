@@ -90,6 +90,8 @@
     .history .empty{color:var(--muted);font-size:13px;padding:8px}
     /* personalized position card */
     .posForm{display:grid;gap:10px}
+    .posGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .posGrid label:first-child{grid-column:1 / -1}
     .posForm label{display:grid;gap:5px;font-size:12px;color:var(--muted)}
     .posForm .opt{opacity:.7;font-weight:400}
     .posForm input{width:100%}
@@ -279,13 +281,16 @@
           <div class="cardHead"><h3>Your position — <span id="posSymbol">MRVL</span></h3></div>
           <div class="cardBody">
             <div class="posForm">
-              <label>Buy price / share ($)<input id="posCost" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 300.00" /></label>
-              <label>Amount invested ($) <span class="opt">(optional)</span><input id="posAmount" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 3000" /></label>
+              <div class="posGrid">
+                <label>Shares<input id="posShares" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 10" /></label>
+                <label>Buy price / share ($)<input id="posCost" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 300.00" /></label>
+                <label>Amount invested ($)<input id="posAmount" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 3000" /></label>
+              </div>
               <div class="posBtns">
                 <button class="btn primary" id="posSave">Save position</button>
                 <button class="btn" id="posRemove">Remove</button>
               </div>
-              <div class="note">Buy price per share powers the personalized buy/sell/hold call &amp; P/L %. Add the amount invested for dollar P/L (shares = amount ÷ price).</div>
+              <div class="note">Enter any two — the third is auto-calculated (amount = shares × price). Buy price per share powers the personalized buy/sell/hold call.</div>
             </div>
             <div id="posResult" class="posResult hidden">
               <div class="posRecBox" id="posRecBox">

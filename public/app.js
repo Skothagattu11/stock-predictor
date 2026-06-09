@@ -45,26 +45,46 @@
     autoSize: true, // track the container's CSS width/height (incl. the taller #chart)
     layout: { background: { color: '#0b1220' }, textColor: '#cbd7e8' },
     grid: { vertLines: { color: '#18243a' }, horzLines: { color: '#18243a' } },
-    rightPriceScale: { borderColor: '#253653' },
-    localization: { timeFormatter: localCrosshair }, // crosshair / tooltip label
+    rightPriceScale: {
+      borderColor: '#253653',
+      autoScale: true,           // tighten to the visible data (denser ticks as you zoom)
+      ticksVisible: true,
+      // Price uses the top ~80%; the bottom 20% is reserved for the volume pane
+      // (contiguous with the volume scale margins below). Less empty padding ->
+      // denser, more detailed price labels.
+      scaleMargins: { top: 0.05, bottom: 0.2 }
+    },
+    localization: {
+      timeFormatter: localCrosshair, // crosshair / tooltip label
+      // Show 2-decimal prices in the crosshair label so detail isn't lost.
+      priceFormatter: function (p) { return (isFinite(p) ? p.toFixed(2) : p); }
+    },
     timeScale: {
       borderColor: '#253653',
       timeVisible: true,
       secondsVisible: false,
       tickMarkFormatter: function (ts) { return localTick(ts); } // x-axis labels
     },
-    crosshair: { mode: 1 }
+    crosshair: { mode: 1 },
+    // Allow zooming the price axis by dragging it, and wheel/pinch zoom on time.
+    handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
+    handleScroll: true
   });
+
+  // 2-decimal price format -> the Y-axis can render fine, $0.01-granular labels.
+  var PRICE_FMT = { type: 'price', precision: 2, minMove: 0.01 };
 
   var candleSeries = chart.addCandlestickSeries({
     upColor: '#2fd17c', downColor: '#ff5c6c',
     borderUpColor: '#2fd17c', borderDownColor: '#ff5c6c',
-    wickUpColor: '#2fd17c', wickDownColor: '#ff5c6c'
+    wickUpColor: '#2fd17c', wickDownColor: '#ff5c6c',
+    priceFormat: PRICE_FMT
   });
 
   // Line view (close price) — toggled with candles via the Chart-style select.
   var lineSeries = chart.addLineSeries({
-    color: '#7fd0ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, visible: false
+    color: '#7fd0ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, visible: false,
+    priceFormat: PRICE_FMT
   });
 
   function applyChartType() {
@@ -93,7 +113,7 @@
     priceScaleId: '',
     color: 'rgba(90,167,255,.4)'
   });
-  volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+  volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
 
   // autoSize:true (above) makes the chart follow the container via ResizeObserver,
   // so no manual width/height handling is needed.
@@ -331,6 +351,9 @@
         if (msg.range) { state.range = msg.range; } // server may clamp the range
         syncViewSelects();
         setCandles(msg.candles || []);
+        var lastC = (msg.candles || [])[ (msg.candles || []).length - 1 ];
+        state.livePrice = lastC && isFinite(lastC.close) ? lastC.close : null;
+        if (state.livePrice != null) priceMap[state.symbol] = state.livePrice;
         if (msg.analysis) setOverlays(msg.analysis.overlays);
         chart.timeScale().fitContent();
         if (msg.analysis) render(msg.analysis);
@@ -349,6 +372,14 @@
             arr[arr.length - 1] = msg.candle;
           } else {
             arr.push(msg.candle);
+          }
+          // live price -> update KPI + position/portfolio P/L immediately
+          if (isFinite(msg.candle.close)) {
+            state.livePrice = msg.candle.close;
+            priceMap[state.symbol] = msg.candle.close;
+            setText('price', money(msg.candle.close));
+            renderPositionCard();
+            renderPortfolio();
           }
         }
         break;
@@ -458,6 +489,7 @@
     state.symbol = symbol;
     state.lastSignalLabel = null;
     state.lastAnalysis = null; // avoid showing the old ticker's signal for the new one
+    state.livePrice = null;
     setText('symbolPill', symbol);
     clearChart();
     subscribe();
@@ -568,15 +600,18 @@
     return (Math.round(n * 10000) / 10000).toString(); // up to 4 dp, trailing zeros trimmed
   }
   function currentPrice(symbol) {
-    if (symbol === state.symbol && state.lastAnalysis && isFinite(state.lastAnalysis.price)) {
-      return state.lastAnalysis.price;
+    if (symbol === state.symbol) {
+      // freshest first: the live forming-candle close, then the last analysis price
+      if (isFinite(state.livePrice)) return state.livePrice;
+      if (state.lastAnalysis && isFinite(state.lastAnalysis.price)) return state.lastAnalysis.price;
     }
     return priceMap[symbol];
   }
 
   // Personalized call = engine signal + your P/L + your entry vs stop/target.
   function computeRecommendation(analysis, pos) {
-    var price = analysis && isFinite(analysis.price) ? analysis.price : currentPrice(pos.symbol);
+    var price = currentPrice(pos.symbol); // freshest live price (falls back internally)
+    if (!isFinite(price) && analysis && isFinite(analysis.price)) price = analysis.price;
     var lv = (analysis && analysis.levels) || {};
     var sig = analysis && analysis.signal;
     // P/L% needs an average cost; null when the user only entered shares.
@@ -618,12 +653,14 @@
     var sym = state.symbol;
     setText('posSymbol', sym);
     var pos = getPosition(sym);
-    var amountEl = $('posAmount'), costEl = $('posCost');
+    var sharesEl = $('posShares'), amountEl = $('posAmount'), costEl = $('posCost');
     var amountVal = (pos && pos.shares > 0 && pos.cost > 0) ? +(pos.shares * pos.cost).toFixed(2) : '';
     if (pos) {
+      if (document.activeElement !== sharesEl) sharesEl.value = pos.shares > 0 ? fmtShares(pos.shares) : '';
       if (document.activeElement !== costEl) costEl.value = pos.cost || '';
       if (document.activeElement !== amountEl) amountEl.value = amountVal;
     } else {
+      if (document.activeElement !== sharesEl) sharesEl.value = '';
       if (document.activeElement !== costEl) costEl.value = '';
       if (document.activeElement !== amountEl) amountEl.value = '';
     }
@@ -708,22 +745,37 @@
     });
   }
 
+  // Auto-calculate the empty field when the other two are filled (amount = shares × price).
+  function recalcPosInputs() {
+    var sEl = $('posShares'), pEl = $('posCost'), aEl = $('posAmount');
+    var S = parseFloat(sEl.value), P = parseFloat(pEl.value), A = parseFloat(aEl.value);
+    S = S > 0 ? S : null; P = P > 0 ? P : null; A = A > 0 ? A : null;
+    if (S && P && A == null && document.activeElement !== aEl) aEl.value = +(S * P).toFixed(2);
+    else if (S && A && P == null && document.activeElement !== pEl) pEl.value = +(A / S).toFixed(4);
+    else if (P && A && S == null && document.activeElement !== sEl) sEl.value = +(A / P).toFixed(4);
+  }
+  ['posShares', 'posCost', 'posAmount'].forEach(function (id) {
+    $(id).addEventListener('input', recalcPosInputs);
+  });
+
   $('posSave').addEventListener('click', function () {
-    var price = parseFloat($('posCost').value);   // buy price per share
-    var amount = parseFloat($('posAmount').value); // total invested (optional)
-    if (!(price > 0)) {
-      showBanner(amount > 0
-        ? 'Also enter your buy price per share so we can estimate shares & P/L.'
-        : 'Enter your buy price per share (and optionally the amount invested).');
+    var S = parseFloat($('posShares').value);
+    var P = parseFloat($('posCost').value);   // buy price per share
+    var A = parseFloat($('posAmount').value); // total invested
+    S = S > 0 ? S : null; P = P > 0 ? P : null; A = A > 0 ? A : null;
+    // Derive the missing value from the other two (amount = shares × price).
+    if (P == null && S && A) P = A / S;
+    if (S == null && P && A) S = A / P;
+    if (P == null && S == null) {
+      showBanner('Enter shares and/or a buy price per share (amount invested is optional).');
       return;
     }
-    var shares = amount > 0 ? amount / price : 0; // shares = amount ÷ price
-    upsertPosition(state.symbol, shares, price);
+    upsertPosition(state.symbol, S || 0, P || 0);
     renderPositionCard(); renderPortfolio(); refreshPortfolioPrices();
   });
   $('posRemove').addEventListener('click', function () {
     removePosition(state.symbol);
-    $('posAmount').value = ''; $('posCost').value = '';
+    $('posShares').value = ''; $('posAmount').value = ''; $('posCost').value = '';
     renderPositionCard(); renderPortfolio();
   });
   $('portfolioRows').addEventListener('click', function (e) {

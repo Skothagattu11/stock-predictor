@@ -34,6 +34,13 @@ const RANGES = {
 // Order used when clamping a range down to what the interval supports.
 const RANGE_ORDER = ['1D', '5D', '1M', '3M', '6M', 'YTD', '1Y', '5Y', 'MAX'];
 
+// Seconds per interval bucket — used to snap bar timestamps so Yahoo's trailing
+// live-snapshot point folds into its proper candle instead of forming a new bar.
+const INTERVAL_SECONDS = {
+  '1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600,
+  '1D': 86400, '1W': 604800,
+};
+
 const INTERVAL_KEYS = Object.keys(INTERVALS);
 const RANGE_KEYS = Object.keys(RANGES);
 const MAX_BARS = 400;
@@ -83,6 +90,7 @@ async function fetchCandles(symbol, interval, range) {
 
   const ts = result.timestamp;
   const q = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
+  const secs = INTERVAL_SECONDS[iv] || 300;
   const out = [];
   for (let i = 0; i < ts.length; i++) {
     const o = q.open ? q.open[i] : null;
@@ -91,14 +99,26 @@ async function fetchCandles(symbol, interval, range) {
     const c = q.close ? q.close[i] : null;
     const v = q.volume ? q.volume[i] : 0;
     if (o == null || h == null || l == null || c == null) continue;
-    out.push({
-      time: ts[i],
-      open: +o.toFixed(4),
-      high: +h.toFixed(4),
-      low: +l.toFixed(4),
-      close: +c.toFixed(4),
-      volume: v || 0,
-    });
+    // Snap to the interval bucket so Yahoo's trailing live-snapshot point (a
+    // non-bucket-aligned single price) merges into the forming candle instead
+    // of marching across the chart as flat one-price bars.
+    const t = Math.floor(ts[i] / secs) * secs;
+    const last = out[out.length - 1];
+    if (last && last.time === t) {
+      last.high = Math.max(last.high, +h.toFixed(4));
+      last.low = Math.min(last.low, +l.toFixed(4));
+      last.close = +c.toFixed(4); // last price in the bucket wins
+      last.volume += v || 0;
+    } else {
+      out.push({
+        time: t,
+        open: +o.toFixed(4),
+        high: +h.toFixed(4),
+        low: +l.toFixed(4),
+        close: +c.toFixed(4),
+        volume: v || 0,
+      });
+    }
   }
 
   return {
