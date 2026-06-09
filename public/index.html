@@ -29,7 +29,7 @@
     .pill.sim{border-color:rgba(90,167,255,.4);color:#cfe2ff}.pill.sim .dot{background:var(--blue)}
     .pill.closed{border-color:rgba(255,191,71,.4);color:#ffe6b8}.pill.closed .dot{background:var(--amber)}
     .grid{display:grid;grid-template-columns:2fr .9fr;gap:18px;align-items:stretch}
-    .chartCard{display:flex;flex-direction:column;flex:1 1 auto}
+    .chartCard{display:flex;flex-direction:column;flex:1 1 auto;min-width:0}
     .card{background:linear-gradient(180deg,rgba(17,27,45,.92),rgba(10,16,27,.92));border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
     .card h2,.card h3{margin:0}
     .cardHead{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line);gap:14px;flex-wrap:wrap}
@@ -54,9 +54,9 @@
     .kpi span{display:block;color:var(--muted);font-size:12px}
     .kpi b{display:block;font-size:22px;margin-top:6px}
     .green{color:var(--green)}.red{color:var(--red)}.amber{color:var(--amber)}.blue{color:var(--blue)}
-    #chart{flex:1 1 auto;min-height:560px}
-    .main{display:flex;flex-direction:column;gap:18px}
-    .side{display:grid;gap:18px;align-content:start}
+    #chart{flex:1 1 auto;min-height:560px;min-width:0}
+    .main{display:flex;flex-direction:column;gap:18px;min-width:0}
+    .side{display:grid;gap:18px;align-content:start;min-width:0}
     .signalBox{padding:18px;border-radius:20px;background:linear-gradient(135deg,rgba(47,209,124,.12),rgba(90,167,255,.08));border:1px solid rgba(47,209,124,.25)}
     .signalBox.sell{background:linear-gradient(135deg,rgba(255,92,108,.14),rgba(255,191,71,.08));border-color:rgba(255,92,108,.3)}
     .signalBox.wait{background:linear-gradient(135deg,rgba(255,191,71,.14),rgba(90,167,255,.06));border-color:rgba(255,191,71,.28)}
@@ -87,7 +87,48 @@
     .banner{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:80;background:linear-gradient(135deg,rgba(255,92,108,.95),rgba(255,120,90,.95));color:#fff;padding:12px 18px;border-radius:14px;box-shadow:var(--shadow);font-size:14px;max-width:90vw;transition:opacity .3s}
     .footer{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}
     .hidden{display:none}
-    @media(max-width:980px){.grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.top{flex-direction:column}.statusArea{align-items:flex-start}.badges{justify-content:flex-start}#chart{height:56vh;min-height:420px}.search input{width:160px}}
+    /* ---------- Responsive ---------- */
+    /* Narrow desktop: indicator snapshot gets cramped at 3 cols in the side rail */
+    @media(max-width:1180px){.mini{grid-template-columns:repeat(2,1fr)}}
+
+    /* Tablet / large phone: single column, chart sizes to viewport height */
+    @media(max-width:980px){
+      .grid{grid-template-columns:1fr}
+      .kpis{grid-template-columns:repeat(2,1fr)}
+      .top{flex-direction:column}
+      .statusArea{align-items:flex-start}
+      .badges{justify-content:flex-start}
+      .chartCard{flex:0 0 auto}
+      #chart{flex:0 0 auto;height:56vh;min-height:380px}
+      .mini{grid-template-columns:repeat(3,1fr)}
+      .search{flex:1 1 100%}
+      .search input{width:100%}
+    }
+
+    /* Phone */
+    @media(max-width:620px){
+      .wrap{padding:14px}
+      .brand h1{font-size:22px}
+      .brand p{font-size:13px}
+      .kpis{grid-template-columns:repeat(2,1fr);gap:10px}
+      .kpi b{font-size:18px}
+      .cardHead{padding:14px}
+      .cardBody{padding:14px}
+      .controls{width:100%}
+      .controls select,.controls .btn{flex:1 1 auto}
+      .signalMain{font-size:24px}
+      .mini{grid-template-columns:repeat(2,1fr)}
+      #chart{height:50vh;min-height:300px}
+      .table td,.table th{padding:9px 6px;font-size:13px}
+      .signalMain{font-size:26px}
+    }
+
+    /* Small phone */
+    @media(max-width:380px){
+      .kpis{grid-template-columns:1fr}
+      .mini{grid-template-columns:1fr 1fr}
+      .brand h1{font-size:20px}
+    }
   </style>
 </head>
 <body>
