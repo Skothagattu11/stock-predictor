@@ -21,7 +21,7 @@ const { analyze } = require('../engine');
 const SIM_INTERVAL_MS = 2000; // simulated candle push cadence
 const ANALYSIS_THROTTLE_MS = 1000; // max 1 analysis recompute per second
 const SEED_COUNT = 60; // initial sim candles to seed live mode chart
-const REAL_REFRESH_MS = 20000; // how often to re-pull real intraday candles
+const REAL_REFRESH_MS = 12000; // how often to re-pull real intraday candles (live)
 const QUOTE_POLL_MS = 5000; // live US-stock price poll cadence
 // Finnhub free tier does NOT stream US-stock trades over WebSocket (paid only),
 // but the /quote REST endpoint IS real-time and free. So live stock mode is
@@ -123,7 +123,8 @@ wss.on('connection', (ws) => {
   // Mutable per-connection session state.
   const session = {
     symbol: null,
-    timeframe: 5,
+    interval: '5m',
+    range: '1D',
     mode: null,
     forceSim: false,
     aggregator: null,
@@ -167,34 +168,42 @@ wss.on('connection', (ws) => {
     }
   }
 
-  function startSafe(symbol, timeframe, forceSim) {
-    start(symbol, timeframe, forceSim).catch((err) =>
+  function startSafe(symbol, interval, range, forceSim) {
+    start(symbol, interval, range, forceSim).catch((err) =>
       safeSend(ws, proto.error('Start failed: ' + (err && err.message)))
     );
   }
 
-  async function start(symbol, timeframe, forceSim) {
+  async function start(symbol, interval, range, forceSim) {
     teardown();
+    interval = yahoo.normInterval(interval);
+    range = yahoo.normRange(range);
     session.symbol = symbol;
-    session.timeframe = timeframe;
+    session.interval = interval;
+    session.range = range;
     session.forceSim = Boolean(forceSim);
-    session.mode = chooseMode(session.forceSim);
-    session.aggregator = new CandleAggregator(timeframe);
+    const tfMinutes = intervalToMinutes(interval);
+    session.aggregator = new CandleAggregator(tfMinutes);
 
     const marketOpen = isMarketOpen();
+    const intraday = yahoo.isIntraday(interval);
+    // session was re-targeted while awaiting? bail helper.
+    const stale = () => session.symbol !== symbol || session.interval !== interval || session.range !== range;
 
     let analysisObj;
     let candles;
+    let effRange = range;
 
-    // PRIMARY SOURCE: real intraday OHLCV candles from Yahoo Finance (no key
-    // needed). Pattern detection / signals MUST run on real candles. The
-    // simulator is only a fallback when the real fetch fails or sim is forced.
+    // PRIMARY SOURCE: real OHLCV candles from Yahoo Finance (no key needed).
+    // Pattern detection / signals MUST run on real candles. The simulator is
+    // only a fallback when the real fetch fails or sim is forced.
     let usedReal = false;
     if (!session.forceSim) {
       try {
-        const real = await yahoo.fetchCandles(symbol, timeframe);
-        if (session.symbol !== symbol || session.timeframe !== timeframe) return;
-        if (real && real.candles.length >= 10) {
+        const real = await yahoo.fetchCandles(symbol, interval, range);
+        if (stale()) return;
+        if (real && real.candles.length >= 5) {
+          effRange = real.effRange || range;
           session.aggregator.seed(real.candles);
           candles = real.candles;
           usedReal = true;
@@ -205,18 +214,24 @@ wss.on('connection', (ws) => {
     }
 
     if (usedReal) {
-      session.mode = marketOpen ? proto.MODE.LIVE : proto.MODE.CLOSED;
       session.connected = true;
-      session.statusMsg = marketOpen
-        ? 'Live — real intraday candles (Yahoo, ~20s refresh)'
-        : 'Market closed — showing real last-session candles';
+      const clampNote = effRange !== range ? ' (range adjusted to ' + effRange + ' for ' + interval + ')' : '';
+      if (intraday) {
+        session.mode = marketOpen ? proto.MODE.LIVE : proto.MODE.CLOSED;
+        session.statusMsg = (marketOpen
+          ? 'Live — real ' + interval + ' candles, ~12s refresh'
+          : 'Market closed — real ' + interval + ' candles (last session)') + clampNote;
+      } else {
+        session.mode = proto.MODE.LIVE;
+        session.statusMsg = 'Real ' + interval + ' candles · ' + effRange + ' (auto-refresh)' + clampNote;
+      }
+      const refreshMs = intraday ? REAL_REFRESH_MS : 60000;
 
       // Re-pull real candles periodically; merge the latest/new bars into chart.
       const refresh = async () => {
         try {
-          const real = await yahoo.fetchCandles(session.symbol, session.timeframe);
-          if (session.symbol !== symbol || session.timeframe !== timeframe) return;
-          if (!real || !real.candles.length) return;
+          const real = await yahoo.fetchCandles(session.symbol, session.interval, session.range);
+          if (stale() || !real || !real.candles.length) return;
           const prev = session.aggregator.getCandles();
           const lastPrevTime = prev.length ? prev[prev.length - 1].time : 0;
           session.aggregator.seed(real.candles);
@@ -229,11 +244,11 @@ wss.on('connection', (ws) => {
         } catch (err) {
           safeSend(ws, proto.status({
             connected: true, marketOpen: isMarketOpen(), mode: session.mode,
-            message: 'Live refresh failed, retrying… (' + (err && err.message) + ')',
+            message: 'Refresh failed, retrying… (' + (err && err.message) + ')',
           }));
         }
       };
-      session.quoteTimer = setInterval(refresh, REAL_REFRESH_MS);
+      session.quoteTimer = setInterval(refresh, refreshMs);
     } else {
       // FALLBACK: simulator (real data unavailable, or user forced simulate).
       session.mode = session.forceSim
@@ -244,14 +259,14 @@ wss.on('connection', (ws) => {
         ? 'Simulated mode (forced)'
         : 'Live data unavailable — showing simulated candles';
       const seedPrice = (await fetchSeedPrice(symbol)) || 200;
-      if (session.symbol !== symbol || session.timeframe !== timeframe) return;
-      candles = simulator.generateCandles(timeframe, 120, seedPrice);
+      if (stale()) return;
+      candles = simulator.generateCandles(tfMinutes, 120, seedPrice);
       session.aggregator.seed(candles);
 
       session.simTimer = setInterval(() => {
         try {
           const prev = session.aggregator.getCandles();
-          const next = simulator.nextSimCandle(prev, session.timeframe);
+          const next = simulator.nextSimCandle(prev, tfMinutes);
           const last = prev[prev.length - 1];
           const closed = !last || next.time > last.time;
           if (closed) { prev.push(next); } else { prev[prev.length - 1] = next; }
@@ -276,7 +291,8 @@ wss.on('connection', (ws) => {
       ws,
       proto.snapshot({
         symbol,
-        timeframe,
+        interval,
+        range: effRange,
         candles,
         analysis: analysisObj,
         mode: session.mode,
@@ -317,27 +333,29 @@ wss.on('connection', (ws) => {
     switch (msg.type) {
       case proto.C2S.SUBSCRIBE: {
         const symbol = String(msg.symbol || '').trim().toUpperCase();
-        const timeframe = normTimeframe(msg.timeframe);
+        const interval = yahoo.normInterval(msg.interval);
+        const range = yahoo.normRange(msg.range);
         if (!symbol) {
           safeSend(ws, proto.error('subscribe requires a symbol'));
           return;
         }
-        startSafe(symbol, timeframe, session.forceSim);
+        startSafe(symbol, interval, range, session.forceSim);
         break;
       }
-      case proto.C2S.SET_TIMEFRAME: {
+      case proto.C2S.SET_VIEW: {
         if (!session.symbol) {
-          safeSend(ws, proto.error('setTimeframe before subscribe'));
+          safeSend(ws, proto.error('setView before subscribe'));
           return;
         }
-        const timeframe = normTimeframe(msg.timeframe);
-        startSafe(session.symbol, timeframe, session.forceSim);
+        const interval = yahoo.normInterval(msg.interval != null ? msg.interval : session.interval);
+        const range = yahoo.normRange(msg.range != null ? msg.range : session.range);
+        startSafe(session.symbol, interval, range, session.forceSim);
         break;
       }
       case proto.C2S.SIMULATE: {
         session.forceSim = Boolean(msg.on);
         if (session.symbol) {
-          startSafe(session.symbol, session.timeframe, session.forceSim);
+          startSafe(session.symbol, session.interval, session.range, session.forceSim);
         }
         break;
       }
@@ -373,10 +391,19 @@ function statusMessage(mode, marketOpen) {
   return marketOpen ? 'Simulated mode' : 'Market closed — simulated mode';
 }
 
-function normTimeframe(tf) {
-  const n = parseInt(tf, 10);
-  const allowed = [1, 5, 15, 60];
-  return allowed.includes(n) ? n : 5;
+// Representative bucket size (minutes) per interval — only used by the simulator
+// fallback and the candle store; real candles come pre-bucketed from Yahoo.
+function intervalToMinutes(interval) {
+  switch (interval) {
+    case '1m': return 1;
+    case '5m': return 5;
+    case '15m': return 15;
+    case '30m': return 30;
+    case '1h': return 60;
+    case '1D': return 1440;
+    case '1W': return 1440 * 7;
+    default: return 5;
+  }
 }
 
 server.on('error', (err) => {

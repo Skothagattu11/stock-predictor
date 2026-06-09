@@ -95,6 +95,63 @@ function createRouter() {
     }
   });
 
+  // GET /api/news/:symbol  -> [{ headline, source, url, datetime, summary, image }]
+  // Finnhub company-news when a key is present (has summaries); otherwise falls
+  // back to Yahoo Finance news (no key needed).
+  router.get('/news/:symbol', async (req, res) => {
+    const symbol = String(req.params.symbol || '').trim().toUpperCase();
+    if (!symbol) return res.status(400).json({ error: 'symbol required' });
+
+    const ymd = (d) => d.toISOString().slice(0, 10);
+    try {
+      if (config.hasKey) {
+        const to = new Date();
+        const from = new Date(to.getTime() - 7 * 24 * 3600 * 1000);
+        const url = `${FINNHUB_REST}/company-news?symbol=${encodeURIComponent(symbol)}&from=${ymd(from)}&to=${ymd(to)}&token=${encodeURIComponent(config.FINNHUB_API_KEY)}`;
+        const r = await fetch(url);
+        if (r.ok) {
+          const data = await r.json();
+          if (Array.isArray(data) && data.length) {
+            const items = data
+              .filter((n) => n && n.headline && n.url)
+              .sort((a, b) => b.datetime - a.datetime)
+              .slice(0, 15)
+              .map((n) => ({
+                headline: n.headline,
+                source: n.source || '',
+                url: n.url,
+                datetime: n.datetime, // unix seconds
+                summary: n.summary || '',
+                image: n.image || '',
+              }));
+            return res.json(items);
+          }
+        }
+      }
+
+      // Fallback: Yahoo Finance news search (no key).
+      const yurl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&newsCount=15&quotesCount=0`;
+      const yr = await fetch(yurl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (!yr.ok) return res.status(502).json({ error: `News failed (${yr.status})` });
+      const yj = await yr.json();
+      const news = Array.isArray(yj && yj.news) ? yj.news : [];
+      const items = news
+        .filter((n) => n && n.title && n.link)
+        .slice(0, 15)
+        .map((n) => ({
+          headline: n.title,
+          source: n.publisher || '',
+          url: n.link,
+          datetime: n.providerPublishTime || 0,
+          summary: '',
+          image: (n.thumbnail && n.thumbnail.resolutions && n.thumbnail.resolutions[0] && n.thumbnail.resolutions[0].url) || '',
+        }));
+      return res.json(items);
+    } catch (err) {
+      return res.status(502).json({ error: 'News request failed', detail: String(err && err.message || err) });
+    }
+  });
+
   // GET /api/health
   router.get('/health', (req, res) => {
     res.json({

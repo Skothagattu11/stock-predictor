@@ -1,28 +1,74 @@
 'use strict';
 
-// Real intraday OHLCV candles from Yahoo Finance's public chart API.
-// No API key required. This is the PRIMARY candle source so that pattern
-// detection / signals run on real market data (Finnhub's free tier has no
-// intraday candles). Returns canonical candle objects per docs/CONTRACTS.md.
+// Real OHLCV candles from Yahoo Finance's public chart API. No API key required.
+// PRIMARY candle source so pattern detection / signals run on real market data.
+// Returns canonical candle objects per docs/CONTRACTS.md.
+//
+// The UI picks an INTERVAL (candle size) and a RANGE (lookback). Yahoo limits how
+// far back each interval can go, so we clamp the range to a valid window.
 
-// Map our timeframe (minutes) -> Yahoo interval + a range that yields enough
-// history for indicators (EMA50 etc.) without being huge.
-const TF_MAP = {
-  1: { interval: '1m', range: '5d' },
-  5: { interval: '5m', range: '5d' },
-  15: { interval: '15m', range: '1mo' },
-  60: { interval: '60m', range: '3mo' },
+// UI interval -> Yahoo interval code + max lookback (days) Yahoo allows for it.
+const INTERVALS = {
+  '1m': { y: '1m', maxDays: 7, intraday: true },
+  '5m': { y: '5m', maxDays: 60, intraday: true },
+  '15m': { y: '15m', maxDays: 60, intraday: true },
+  '30m': { y: '30m', maxDays: 60, intraday: true },
+  '1h': { y: '60m', maxDays: 730, intraday: true },
+  '1D': { y: '1d', maxDays: Infinity, intraday: false },
+  '1W': { y: '1wk', maxDays: Infinity, intraday: false },
 };
 
-const MAX_BARS = 320; // cap sent to the browser / kept in the aggregator
+// UI range -> Yahoo range code + approx span in days (for clamping).
+const RANGES = {
+  '1D': { y: '1d', days: 1 },
+  '5D': { y: '5d', days: 5 },
+  '1M': { y: '1mo', days: 31 },
+  '3M': { y: '3mo', days: 93 },
+  '6M': { y: '6mo', days: 186 },
+  'YTD': { y: 'ytd', days: 366 },
+  '1Y': { y: '1y', days: 366 },
+  '5Y': { y: '5y', days: 1830 },
+  'MAX': { y: 'max', days: Infinity },
+};
 
-async function fetchCandles(symbol, tfMinutes) {
-  const m = TF_MAP[tfMinutes] || TF_MAP[5];
+// Order used when clamping a range down to what the interval supports.
+const RANGE_ORDER = ['1D', '5D', '1M', '3M', '6M', 'YTD', '1Y', '5Y', 'MAX'];
+
+const INTERVAL_KEYS = Object.keys(INTERVALS);
+const RANGE_KEYS = Object.keys(RANGES);
+const MAX_BARS = 400;
+
+function normInterval(i) {
+  return INTERVALS[i] ? i : '5m';
+}
+function normRange(r) {
+  return RANGES[r] ? r : '1D';
+}
+function isIntraday(interval) {
+  return INTERVALS[normInterval(interval)].intraday;
+}
+
+// Pick the requested range, or the largest valid one the interval allows.
+function clampRange(interval, range) {
+  const maxDays = INTERVALS[normInterval(interval)].maxDays;
+  const want = normRange(range);
+  if (RANGES[want].days <= maxDays) return want;
+  // Walk down to the largest range that fits.
+  for (let i = RANGE_ORDER.length - 1; i >= 0; i--) {
+    const k = RANGE_ORDER[i];
+    if (RANGES[k].days <= maxDays) return k;
+  }
+  return '1D';
+}
+
+async function fetchCandles(symbol, interval, range) {
+  const iv = normInterval(interval);
+  const effRange = clampRange(iv, range);
   const url =
     'https://query1.finance.yahoo.com/v8/finance/chart/' +
     encodeURIComponent(symbol) +
-    '?interval=' + m.interval +
-    '&range=' + m.range +
+    '?interval=' + INTERVALS[iv].y +
+    '&range=' + RANGES[effRange].y +
     '&includePrePost=false';
 
   const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
@@ -44,7 +90,6 @@ async function fetchCandles(symbol, tfMinutes) {
     const l = q.low ? q.low[i] : null;
     const c = q.close ? q.close[i] : null;
     const v = q.volume ? q.volume[i] : 0;
-    // Skip gap rows where Yahoo has nulls (no trade in that bucket).
     if (o == null || h == null || l == null || c == null) continue;
     out.push({
       time: ts[i],
@@ -58,8 +103,17 @@ async function fetchCandles(symbol, tfMinutes) {
 
   return {
     candles: out.slice(-MAX_BARS),
+    effRange, // the range actually used (may be clamped from the request)
+    clamped: effRange !== normRange(range),
     meta: result.meta || {},
   };
 }
 
-module.exports = { fetchCandles };
+module.exports = {
+  fetchCandles,
+  isIntraday,
+  normInterval,
+  normRange,
+  INTERVAL_KEYS,
+  RANGE_KEYS,
+};

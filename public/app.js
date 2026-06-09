@@ -8,24 +8,37 @@
   // ---------- State ----------
   var state = {
     symbol: 'MRVL',
-    timeframe: 5,
+    interval: '5m',   // candle size / live-update granularity
+    range: '1D',      // how much history
+    chartType: 'candles',
     simulate: false,
     candles: [],
     lastSignalLabel: null
   };
+
+  // Intraday intervals get time-of-day axis labels; daily/weekly get dates.
+  function isIntradayInterval(i) {
+    return i === '1m' || i === '5m' || i === '15m' || i === '30m' || i === '1h';
+  }
 
   // ---------- Chart setup (mirrors the reference, plus extra overlays) ----------
   // Lightweight Charts renders timestamps in UTC and has no built-in timezone
   // support, so we format axis ticks + crosshair in the BROWSER's local timezone.
   // (candle.time is a UTC unix-seconds value, so new Date(ts*1000) is the correct
   // moment; toLocale* then renders it in whatever timezone the user is in.)
-  function localTime(ts) {
-    return new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // Axis ticks: time-of-day for intraday periods, calendar dates for longer ones.
+  function localTick(ts) {
+    var d = new Date(ts * 1000);
+    return isIntradayInterval(state.interval)
+      ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
-  function localDateTime(ts) {
-    return new Date(ts * 1000).toLocaleString([], {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
+  // Crosshair label: include date + time intraday, full date otherwise.
+  function localCrosshair(ts) {
+    var d = new Date(ts * 1000);
+    return isIntradayInterval(state.interval)
+      ? d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   var chart = LightweightCharts.createChart(document.getElementById('chart'), {
@@ -33,12 +46,12 @@
     layout: { background: { color: '#0b1220' }, textColor: '#cbd7e8' },
     grid: { vertLines: { color: '#18243a' }, horzLines: { color: '#18243a' } },
     rightPriceScale: { borderColor: '#253653' },
-    localization: { timeFormatter: localDateTime }, // crosshair / tooltip label
+    localization: { timeFormatter: localCrosshair }, // crosshair / tooltip label
     timeScale: {
       borderColor: '#253653',
       timeVisible: true,
       secondsVisible: false,
-      tickMarkFormatter: function (ts) { return localTime(ts); } // x-axis labels
+      tickMarkFormatter: function (ts) { return localTick(ts); } // x-axis labels
     },
     crosshair: { mode: 1 }
   });
@@ -48,6 +61,23 @@
     borderUpColor: '#2fd17c', borderDownColor: '#ff5c6c',
     wickUpColor: '#2fd17c', wickDownColor: '#ff5c6c'
   });
+
+  // Line view (close price) — toggled with candles via the Chart-style select.
+  var lineSeries = chart.addLineSeries({
+    color: '#7fd0ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, visible: false
+  });
+
+  function applyChartType() {
+    var line = state.chartType === 'line';
+    candleSeries.applyOptions({ visible: !line });
+    lineSeries.applyOptions({ visible: line });
+    // Legend: show candle up/down in candles mode, the close swatch in line mode.
+    var up = $('lgUp'), down = $('lgDown'), close = $('lgClose');
+    if (up) up.style.display = line ? 'none' : '';
+    if (down) down.style.display = line ? 'none' : '';
+    if (close) close.style.display = line ? '' : 'none';
+    try { chart.timeScale().fitContent(); } catch (e) {}
+  }
 
   // EMA overlays
   var ema9Series = chart.addLineSeries({ color: '#5aa7ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
@@ -82,6 +112,9 @@
   function setCandles(candles) {
     state.candles = candles || [];
     candleSeries.setData(state.candles);
+    lineSeries.setData(state.candles.map(function (c) {
+      return { time: c.time, value: c.close };
+    }));
     volumeSeries.setData(state.candles.map(function (c) {
       return { time: c.time, value: c.volume, color: volColor(c) };
     }));
@@ -237,7 +270,7 @@
   }
 
   function subscribe() {
-    send({ type: 'subscribe', symbol: state.symbol, timeframe: state.timeframe });
+    send({ type: 'subscribe', symbol: state.symbol, interval: state.interval, range: state.range });
   }
 
   function connect() {
@@ -254,6 +287,7 @@
       setConnBadge(true);
       subscribe();
       if (state.simulate) send({ type: 'simulate', on: true });
+      fetchNews(state.symbol);
     };
 
     ws.onmessage = function (evt) {
@@ -287,7 +321,9 @@
     switch (msg.type) {
       case 'snapshot':
         if (msg.symbol) { state.symbol = msg.symbol; setText('symbolPill', msg.symbol); }
-        if (msg.timeframe) { state.timeframe = +msg.timeframe; syncTimeframeSelect(); }
+        if (msg.interval) { state.interval = msg.interval; }
+        if (msg.range) { state.range = msg.range; } // server may clamp the range
+        syncViewSelects();
         setCandles(msg.candles || []);
         if (msg.analysis) setOverlays(msg.analysis.overlays);
         chart.timeScale().fitContent();
@@ -299,6 +335,7 @@
         if (msg.candle) {
           // closed=false updates the forming bar; closed=true also updates (new bar appended)
           candleSeries.update(msg.candle);
+          lineSeries.update({ time: msg.candle.time, value: msg.candle.close });
           volumeSeries.update({ time: msg.candle.time, value: msg.candle.volume, color: volColor(msg.candle) });
           // keep local copy in sync
           var arr = state.candles;
@@ -330,14 +367,25 @@
   }
 
   // ---------- Controls ----------
-  function syncTimeframeSelect() {
-    var sel = $('timeframe');
-    if (sel) sel.value = String(state.timeframe);
+  function syncViewSelects() {
+    var iv = $('interval'); if (iv) iv.value = state.interval;
+    var rg = $('range'); if (rg) rg.value = state.range;
+    var ct = $('chartType'); if (ct) ct.value = state.chartType;
   }
 
-  $('timeframe').addEventListener('change', function () {
-    state.timeframe = +this.value;
-    send({ type: 'setTimeframe', timeframe: state.timeframe });
+  $('interval').addEventListener('change', function () {
+    state.interval = this.value;
+    send({ type: 'setView', interval: state.interval, range: state.range });
+  });
+
+  $('range').addEventListener('change', function () {
+    state.range = this.value;
+    send({ type: 'setView', interval: state.interval, range: state.range });
+  });
+
+  $('chartType').addEventListener('change', function () {
+    state.chartType = this.value;
+    applyChartType();
   });
 
   $('analyze').addEventListener('click', function () {
@@ -407,13 +455,49 @@
     clearChart();
     subscribe();
     if (state.simulate) send({ type: 'simulate', on: true });
+    fetchNews(symbol);
     searchInput.value = '';
     hideResults();
+  }
+
+  // ---------- Market news ----------
+  function relTime(unixSec) {
+    if (!unixSec) return '';
+    var diff = Math.floor(Date.now() / 1000) - unixSec;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return Math.floor(diff / 86400) + 'd ago';
+  }
+
+  function fetchNews(symbol) {
+    setText('newsSymbol', symbol);
+    var box = $('news');
+    box.innerHTML = '<div class="empty">Loading news…</div>';
+    fetch('/api/news/' + encodeURIComponent(symbol))
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (items) { renderNews(items || []); })
+      .catch(function () { box.innerHTML = '<div class="empty">Could not load news.</div>'; });
+  }
+
+  function renderNews(items) {
+    var box = $('news');
+    if (!items.length) { box.innerHTML = '<div class="empty">No recent news found.</div>'; return; }
+    box.innerHTML = items.slice(0, 15).map(function (n) {
+      var thumb = n.image ? '<img class="nthumb" src="' + encodeURI(n.image) + '" alt="" onerror="this.style.display=\'none\'"/>' : '';
+      var meta = [escapeHtml(n.source), relTime(n.datetime)].filter(Boolean).join(' · ');
+      var sum = n.summary ? '<div class="nsum">' + escapeHtml(n.summary) + '</div>' : '';
+      return '<a class="nrow" href="' + encodeURI(n.url) + '" target="_blank" rel="noopener noreferrer">' +
+        thumb +
+        '<div class="nbody"><div class="nhead">' + escapeHtml(n.headline) + '</div>' +
+        '<div class="nmeta">' + meta + '</div>' + sum + '</div></a>';
+    }).join('');
   }
 
   function clearChart() {
     state.candles = [];
     candleSeries.setData([]);
+    lineSeries.setData([]);
     volumeSeries.setData([]);
     ema9Series.setData([]); ema20Series.setData([]); ema50Series.setData([]);
     bbUpperSeries.setData([]); bbLowerSeries.setData([]);
@@ -451,6 +535,7 @@
   // ---------- Boot ----------
   setConnBadge(false);
   setModeBadge('simulated');
-  syncTimeframeSelect();
+  syncViewSelects();
+  applyChartType();
   connect();
 })();

@@ -79,17 +79,23 @@ Requires >= 2 candles; with very few candles, fill what's possible and default s
 
 ## Browser <-> Server WebSocket protocol (path `/stream`)
 
+The chart view is an INTERVAL (candle size) + RANGE (lookback):
+- interval: `1m | 5m | 15m | 30m | 1h | 1D | 1W`
+- range:    `1D | 5D | 1M | 3M | 6M | YTD | 1Y | 5Y | MAX`
+The server clamps the range to what the interval allows (e.g. `1m` → max ~5D) and
+returns the effective `range` in the snapshot.
+
 Messages are JSON. Client → Server:
 ```js
-{ type:'subscribe',   symbol:'MRVL', timeframe:5 }   // timeframe in minutes: 1|5|15|60
+{ type:'subscribe', symbol:'MRVL', interval:'5m', range:'1D' }
 { type:'unsubscribe' }
-{ type:'setTimeframe', timeframe:15 }
-{ type:'simulate', on:true }                          // force simulated candles
+{ type:'setView', interval:'15m', range:'1M' }        // change interval and/or range
+{ type:'simulate', on:true }                           // force simulated candles
 ```
 Server → Client:
 ```js
-{ type:'snapshot', symbol, timeframe, candles:[...], analysis:{...},
-  mode:'live'|'simulated'|'closed', marketOpen:boolean }
+{ type:'snapshot', symbol, interval, range, candles:[...], analysis:{...},
+  mode:'live'|'simulated'|'closed', marketOpen:boolean }  // range may be clamped
 { type:'candle', candle:{...}, closed:boolean }       // closed=false updates last; true appends
 { type:'analysis', analysis:{...} }                   // recomputed analysis object
 { type:'status', connected:boolean, marketOpen:boolean,
@@ -102,8 +108,12 @@ Server → Client:
 ```
 GET /api/search?q=<text>   -> [{ symbol, description }]      (proxy Finnhub /search; mock list if no key)
 GET /api/quote/:symbol     -> { c, h, l, o, pc }              (proxy Finnhub /quote; mock if no key)
+GET /api/news/:symbol      -> [{ headline, source, url, datetime, summary, image }]
+                             (Finnhub company-news w/ key; Yahoo news fallback)
 GET /api/health            -> { ok:true, mode, hasKey }
 ```
+
+Candles come from Yahoo Finance (`src/yahoo-client.js`) — real OHLCV, no key needed.
 
 ## Env (`.env`)
 

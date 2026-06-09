@@ -8,11 +8,15 @@ browser over WebSocket and auto-refreshed.
 
 > ⚠️ Educational tool only. Signals are probability/risk prompts, **not financial advice**.
 
-![dashboard](docs/screenshot-real.png)
+![dashboard](docs/screenshot.png)
 
 ## Features
 
-- **Real intraday candles** for any US ticker (type-ahead search) from Yahoo Finance — 1m / 5m / 15m / 1h — auto-refreshed every ~20s and streamed to the browser. **No API key required.**
+- **Real candles** for any US ticker (type-ahead search) from Yahoo Finance — **no API key required.**
+- **Interval** (candle size): 1m / 5m / 15m / 30m / 1h / 1D / 1W, with **live updates** (~12s refresh) on intraday intervals during market hours.
+- **Range** (lookback): 1D / 5D / 1M / 3M / 6M / YTD / 1Y / 5Y / Max — auto-clamped to what each interval supports.
+- **Candles ↔ Line** chart toggle, with a **color legend** (EMA 9/20/50, Bollinger Bands, volume, up/down candles).
+- **Collapsible market-news** section (company + market headlines) that refreshes per ticker.
 - Patterns and signals run on **real OHLCV**, not synthetic data, so the analysis is meaningful.
 - **Enhanced rules engine** (`engine/`):
   - Indicators: EMA 9/20/50, RSI 14, MACD (12/26/9), Bollinger Bands (20,2), ATR 14, VWAP, volume ratio.

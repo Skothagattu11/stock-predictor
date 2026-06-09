@@ -16,7 +16,7 @@ const S2C = Object.freeze({
 const C2S = Object.freeze({
   SUBSCRIBE: 'subscribe',
   UNSUBSCRIBE: 'unsubscribe',
-  SET_TIMEFRAME: 'setTimeframe',
+  SET_VIEW: 'setView', // { interval, range }
   SIMULATE: 'simulate',
 });
 
@@ -29,11 +29,12 @@ const MODE = Object.freeze({
 
 // ---- Builders (return plain objects; caller stringifies) -----------------
 
-function snapshot({ symbol, timeframe, candles, analysis, mode, marketOpen }) {
+function snapshot({ symbol, interval, range, candles, analysis, mode, marketOpen }) {
   return {
     type: S2C.SNAPSHOT,
     symbol,
-    timeframe,
+    interval,
+    range,
     candles: candles || [],
     analysis: analysis || null,
     mode,
