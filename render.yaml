@@ -1,0 +1,17 @@
+# Render Blueprint — deploy as a Node web service.
+# In Render: New + > Blueprint, point at this repo, it reads this file.
+services:
+  - type: web
+    name: stock-predictor
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Optional: only used for symbol search / quote fallback. Candles come
+      # from Yahoo Finance and need no key. Set this in the Render dashboard
+      # (Environment tab) — do NOT commit a real key.
+      - key: FINNHUB_API_KEY
+        sync: false

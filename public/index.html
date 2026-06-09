@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Candle Pattern Signal Dashboard</title>
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    :root{
+      --bg:#070b12;--panel:#0e1522;--panel2:#111b2d;--text:#e8eef8;--muted:#95a3b8;
+      --green:#2fd17c;--red:#ff5c6c;--amber:#ffbf47;--blue:#5aa7ff;--line:#243149;
+      --shadow:0 20px 70px rgba(0,0,0,.35);--radius:22px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(circle at top left,#132541 0,#070b12 42%,#05070c 100%);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:var(--text)}
+    .wrap{max-width:1440px;margin:0 auto;padding:28px}
+    .top{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:20px}
+    .brand h1{margin:0;font-size:30px;letter-spacing:-.04em}
+    .brand p{margin:8px 0 0;color:var(--muted);max-width:760px}
+    .statusArea{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+    .badges{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+    .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid #263550;background:rgba(255,255,255,.04);padding:9px 13px;border-radius:999px;color:#c9d7ec;font-size:13px}
+    .pill .dot{width:9px;height:9px;border-radius:999px;background:var(--muted);box-shadow:0 0 0 0 rgba(0,0,0,0)}
+    .pill.ok{border-color:rgba(47,209,124,.4);color:#bff2d6}
+    .pill.ok .dot{background:var(--green);box-shadow:0 0 8px rgba(47,209,124,.7)}
+    .pill.bad{border-color:rgba(255,92,108,.4);color:#ffc8ce}
+    .pill.bad .dot{background:var(--red)}
+    .pill.live{border-color:rgba(47,209,124,.4);color:#bff2d6}.pill.live .dot{background:var(--green)}
+    .pill.sim{border-color:rgba(90,167,255,.4);color:#cfe2ff}.pill.sim .dot{background:var(--blue)}
+    .pill.closed{border-color:rgba(255,191,71,.4);color:#ffe6b8}.pill.closed .dot{background:var(--amber)}
+    .grid{display:grid;grid-template-columns:2fr .9fr;gap:18px;align-items:stretch}
+    .chartCard{display:flex;flex-direction:column;flex:1 1 auto}
+    .card{background:linear-gradient(180deg,rgba(17,27,45,.92),rgba(10,16,27,.92));border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+    .card h2,.card h3{margin:0}
+    .cardHead{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line);gap:14px;flex-wrap:wrap}
+    .cardBody{padding:18px 20px}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .btn,select,input,textarea{background:#0a1220;border:1px solid #263550;color:var(--text);border-radius:12px;padding:10px 12px;font-size:14px}
+    .btn{cursor:pointer;transition:.2s}
+    .btn:hover{border-color:#4972ac;background:#101d32}
+    .btn.primary{background:linear-gradient(135deg,#246bfe,#35b2ff);border:0;font-weight:700}
+    .btn.toggle.on{background:linear-gradient(135deg,#246bfe,#35b2ff);border:0;font-weight:700}
+    /* ticker search */
+    .search{position:relative}
+    .search input{width:200px}
+    .results{position:absolute;top:46px;left:0;right:0;z-index:40;background:#0b1424;border:1px solid #263550;border-radius:14px;box-shadow:var(--shadow);max-height:280px;overflow:auto;padding:6px}
+    .results .item{padding:10px 12px;border-radius:10px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;font-size:14px}
+    .results .item:hover{background:#142340}
+    .results .item b{color:#fff}
+    .results .item span{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .results .empty{padding:12px;color:var(--muted);font-size:13px}
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+    .kpi{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:14px}
+    .kpi span{display:block;color:var(--muted);font-size:12px}
+    .kpi b{display:block;font-size:22px;margin-top:6px}
+    .green{color:var(--green)}.red{color:var(--red)}.amber{color:var(--amber)}.blue{color:var(--blue)}
+    #chart{flex:1 1 auto;min-height:560px}
+    .main{display:flex;flex-direction:column;gap:18px}
+    .side{display:grid;gap:18px;align-content:start}
+    .signalBox{padding:18px;border-radius:20px;background:linear-gradient(135deg,rgba(47,209,124,.12),rgba(90,167,255,.08));border:1px solid rgba(47,209,124,.25)}
+    .signalBox.sell{background:linear-gradient(135deg,rgba(255,92,108,.14),rgba(255,191,71,.08));border-color:rgba(255,92,108,.3)}
+    .signalBox.wait{background:linear-gradient(135deg,rgba(255,191,71,.14),rgba(90,167,255,.06));border-color:rgba(255,191,71,.28)}
+    .signalMain{font-size:30px;font-weight:900;letter-spacing:-.04em}
+    .score{height:12px;background:#08101d;border-radius:999px;overflow:hidden;margin:14px 0}
+    .score div{height:100%;background:linear-gradient(90deg,#ff5c6c,#ffbf47,#2fd17c);width:50%;transition:width .35s ease}
+    .reason{display:grid;gap:10px;margin-top:12px}
+    .reason div{padding:12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);font-size:14px;color:#d5dfed}
+    .table{width:100%;border-collapse:collapse}
+    .table td,.table th{border-bottom:1px solid var(--line);padding:12px 8px;text-align:left;font-size:14px}
+    .table th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+    .badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-size:12px;border:1px solid rgba(255,255,255,.12)}
+    .badge.buy{color:var(--green);background:rgba(47,209,124,.09)}
+    .badge.sell{color:var(--red);background:rgba(255,92,108,.09)}
+    .badge.wait{color:var(--amber);background:rgba(255,191,71,.09)}
+    .lower{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:18px}
+    .note{font-size:13px;color:var(--muted);line-height:1.55}
+    .mini{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .mini div{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:12px}
+    .mini span{color:var(--muted);font-size:12px}
+    .mini b{display:block;margin-top:6px}
+    /* signal history log */
+    .history{display:grid;gap:8px;max-height:280px;overflow:auto}
+    .history .hrow{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);font-size:13px}
+    .history .ts{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+    .history .empty{color:var(--muted);font-size:13px;padding:8px}
+    /* non-blocking error banner */
+    .banner{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:80;background:linear-gradient(135deg,rgba(255,92,108,.95),rgba(255,120,90,.95));color:#fff;padding:12px 18px;border-radius:14px;box-shadow:var(--shadow);font-size:14px;max-width:90vw;transition:opacity .3s}
+    .footer{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}
+    .hidden{display:none}
+    @media(max-width:980px){.grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.top{flex-direction:column}.statusArea{align-items:flex-start}.badges{justify-content:flex-start}#chart{height:56vh;min-height:420px}.search input{width:160px}}
+  </style>
+</head>
+<body>
+  <div id="errorBanner" class="banner hidden"></div>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <h1>Live Candle Pattern Signal Dashboard</h1>
+        <p>Live multi-ticker candle structure, momentum, volume, VWAP, RSI, MACD, ATR, Bollinger bands and EMA trend with pattern-based entry/exit zones. Signals are probability/risk prompts, not guaranteed predictions.</p>
+      </div>
+      <div class="statusArea">
+        <div class="badges">
+          <span id="connBadge" class="pill bad"><span class="dot"></span>Disconnected</span>
+          <span id="modeBadge" class="pill sim"><span class="dot"></span>Simulated</span>
+        </div>
+        <div class="pill">Ticker: <b id="symbolPill">MRVL</b></div>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><span>Reference live quote</span><b id="price">--</b></div>
+      <div class="kpi"><span>Intraday range</span><b id="range">--</b></div>
+      <div class="kpi"><span>Current signal</span><b id="signalKpi" class="amber">WAIT</b></div>
+      <div class="kpi"><span>Confidence</span><b id="confKpi">--%</b></div>
+    </div>
+
+    <div class="grid">
+      <div class="main">
+      <div class="card chartCard">
+        <div class="cardHead">
+          <div><h2>Live candlestick chart</h2><div class="note" id="modeNote">Streaming live candles over WebSocket.</div></div>
+          <div class="controls">
+            <div class="search">
+              <input id="searchInput" type="text" placeholder="Search ticker…" autocomplete="off" />
+              <div id="searchResults" class="results hidden"></div>
+            </div>
+            <select id="timeframe">
+              <option value="1">1m</option>
+              <option value="5" selected>5m</option>
+              <option value="15">15m</option>
+              <option value="60">1h</option>
+            </select>
+            <button class="btn toggle" id="simulate">Simulate</button>
+            <button class="btn primary" id="analyze">Analyze now</button>
+          </div>
+        </div>
+        <div id="chart"></div>
+      </div>
+      <div class="card">
+        <div class="cardHead"><h3>Detected candle patterns</h3></div>
+        <div class="cardBody">
+          <table class="table"><thead><tr><th>Pattern</th><th>Meaning</th><th>Signal</th></tr></thead><tbody id="patterns"></tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="cardHead"><h3>Signal history</h3></div>
+        <div class="cardBody">
+          <div id="history" class="history"><div class="empty">No signal changes yet.</div></div>
+        </div>
+      </div>
+      </div><!-- /.main -->
+
+      <div class="side">
+        <div class="card">
+          <div class="cardBody">
+            <div id="signalBox" class="signalBox wait">
+              <div class="note">Trading decision helper</div>
+              <div class="signalMain" id="signalMain">WAIT</div>
+              <div class="score"><div id="scoreBar"></div></div>
+              <div class="note" id="signalText">Waiting for stronger confirmation.</div>
+            </div>
+            <div class="reason" id="reasons"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="cardHead"><h3>Entry / exit plan</h3></div>
+          <div class="cardBody mini">
+            <div><span>Buy trigger</span><b id="buyTrigger">--</b></div>
+            <div><span>Stop loss</span><b id="stopLoss">--</b></div>
+            <div><span>Sell / trim</span><b id="sellTarget">--</b></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="cardHead"><h3>Indicator snapshot</h3></div>
+          <div class="cardBody mini">
+            <div><span>RSI 14</span><b id="rsi">--</b></div>
+            <div><span>EMA 9 / 20 / 50</span><b id="ema">--</b></div>
+            <div><span>Volume pulse</span><b id="vol">--</b></div>
+            <div><span>MACD (hist)</span><b id="macd">--</b></div>
+            <div><span>ATR 14</span><b id="atr">--</b></div>
+            <div><span>VWAP</span><b id="vwap">--</b></div>
+            <div><span>Bollinger (L/M/U)</span><b id="bb">--</b></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="cardHead"><h3>CSV backfill (visual only)</h3></div>
+          <div class="cardBody">
+            <p class="note">Paste CSV rows: <b>time,open,high,low,close,volume</b>. Example: <code>09:30,300,304,298,302,1200000</code>. CSV is plotted locally for visual backfill only — the server drives live analysis.</p>
+            <textarea id="csv" style="width:100%;height:120px;background:#070d18;color:#e8eef8;border:1px solid #263550;border-radius:14px;padding:12px"></textarea>
+            <div class="controls" style="margin-top:12px">
+              <button class="btn primary" id="loadCsv">Load CSV candles</button>
+              <button class="btn" id="sampleCsv">Insert sample</button>
+            </div>
+            <p class="note" id="csvNote"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">Educational dashboard only. Use position sizing, stop losses, and your own judgment. Do not treat any signal as financial advice.</div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

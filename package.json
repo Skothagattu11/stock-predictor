@@ -1,0 +1,17 @@
+{
+  "name": "candle-signal-dashboard",
+  "version": "1.0.0",
+  "description": "Live candlestick pattern signal dashboard (Finnhub WebSocket + enhanced rules engine)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}
