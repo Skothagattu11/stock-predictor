@@ -150,9 +150,32 @@ async function fetchPrice(symbol) {
   };
 }
 
+// Keyless symbol search via Yahoo Finance (covers far more tickers than the
+// Finnhub free search, incl. ADRs/OTC like SFTBY). Returns [{symbol, description}].
+async function searchSymbols(q) {
+  const url =
+    'https://query1.finance.yahoo.com/v1/finance/search?q=' +
+    encodeURIComponent(q) + '&quotesCount=10&newsCount=0';
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) throw new Error('Yahoo search HTTP ' + res.status);
+  const j = await res.json();
+  const quotes = Array.isArray(j && j.quotes) ? j.quotes : [];
+  const allow = { EQUITY: 1, ETF: 1, MUTUALFUND: 1, INDEX: 1, CURRENCY: 1, CRYPTOCURRENCY: 1, FUTURE: 1 };
+  return quotes
+    .filter(function (x) { return x && x.symbol && (!x.quoteType || allow[x.quoteType]); })
+    .map(function (x) {
+      var exch = x.exchange || x.exchDisp || '';
+      return {
+        symbol: x.symbol,
+        description: x.shortname || x.longname || x.quoteType || exch || '',
+      };
+    });
+}
+
 module.exports = {
   fetchCandles,
   fetchPrice,
+  searchSymbols,
   isIntraday,
   normInterval,
   normRange,

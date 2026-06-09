@@ -37,35 +37,41 @@ function createRouter() {
   const router = express.Router();
 
   // GET /api/search?q=
+  // Keyless symbol search via Yahoo (works in prod without a Finnhub key and
+  // covers more tickers). Falls back to Finnhub (if a key is set) then a mock list.
   router.get('/search', async (req, res) => {
     const q = String(req.query.q || '').trim();
+    if (!q) return res.json([]);
+    const ql = q.toLowerCase();
+    const mock = MOCK_SYMBOLS.filter(
+      (s) => s.symbol.toLowerCase().includes(ql) || s.description.toLowerCase().includes(ql)
+    );
 
-    if (!config.hasKey) {
-      const ql = q.toLowerCase();
-      const list = q
-        ? MOCK_SYMBOLS.filter(
-            (s) =>
-              s.symbol.toLowerCase().includes(ql) ||
-              s.description.toLowerCase().includes(ql)
-          )
-        : MOCK_SYMBOLS;
-      return res.json(list);
-    }
-
+    // 1) Yahoo (no key needed)
     try {
-      const url = `${FINNHUB_REST}/search?q=${encodeURIComponent(q)}&token=${encodeURIComponent(config.FINNHUB_API_KEY)}`;
-      const r = await fetch(url);
-      if (!r.ok) {
-        return res.status(502).json({ error: `Finnhub search failed (${r.status})` });
-      }
-      const data = await r.json();
-      const result = Array.isArray(data && data.result) ? data.result : [];
-      return res.json(
-        result.map((x) => ({ symbol: x.symbol, description: x.description }))
-      );
+      const list = await yahoo.searchSymbols(q);
+      if (list.length) return res.json(list);
     } catch (err) {
-      return res.status(502).json({ error: 'Search request failed', detail: String(err && err.message || err) });
+      // fall through to Finnhub / mock
     }
+
+    // 2) Finnhub (only if a key is configured)
+    if (config.hasKey) {
+      try {
+        const url = `${FINNHUB_REST}/search?q=${encodeURIComponent(q)}&token=${encodeURIComponent(config.FINNHUB_API_KEY)}`;
+        const r = await fetch(url);
+        if (r.ok) {
+          const data = await r.json();
+          const result = Array.isArray(data && data.result) ? data.result : [];
+          if (result.length) {
+            return res.json(result.map((x) => ({ symbol: x.symbol, description: x.description })));
+          }
+        }
+      } catch (err) { /* fall through */ }
+    }
+
+    // 3) Last resort: mock list
+    return res.json(mock);
   });
 
   // GET /api/quote/:symbol
