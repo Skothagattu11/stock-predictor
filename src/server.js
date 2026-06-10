@@ -130,6 +130,7 @@ wss.on('connection', (ws) => {
     aggregator: null,
     simTimer: null,
     quoteTimer: null,
+    priceTimer: null,
     lastAnalysisAt: 0,
     tradeHandler: null,
     subscribedSymbol: null, // symbol we hold a live ref for
@@ -143,6 +144,10 @@ wss.on('connection', (ws) => {
     if (session.quoteTimer) {
       clearInterval(session.quoteTimer);
       session.quoteTimer = null;
+    }
+    if (session.priceTimer) {
+      clearInterval(session.priceTimer);
+      session.priceTimer = null;
     }
     if (session.tradeHandler) {
       finnhub.off('trade', session.tradeHandler);
@@ -161,7 +166,7 @@ wss.on('connection', (ws) => {
     if (!force && now - session.lastAnalysisAt < ANALYSIS_THROTTLE_MS) return;
     session.lastAnalysisAt = now;
     try {
-      const a = analyze(candles);
+      const a = analyze(candles, { intraday: yahoo.isIntraday(session.interval) });
       safeSend(ws, proto.analysis(a));
     } catch (err) {
       safeSend(ws, proto.error('Analysis failed: ' + (err && err.message)));
@@ -257,6 +262,27 @@ wss.on('connection', (ws) => {
         }
       };
       session.quoteTimer = setInterval(refresh, refreshMs);
+
+      // Faster near-real-time tick: while trading, poll just the current price
+      // (~5s) and nudge the forming candle's close/high/low between full fetches.
+      if (sess !== 'closed') {
+        const fastPrice = async () => {
+          try {
+            const q = await yahoo.fetchPrice(session.symbol);
+            if (stale() || !q || !Number.isFinite(q.price)) return;
+            const arr = session.aggregator.getCandles();
+            if (!arr.length) return;
+            const lastC = arr[arr.length - 1];
+            lastC.close = q.price;
+            if (q.price > lastC.high) lastC.high = q.price;
+            if (q.price < lastC.low) lastC.low = q.price;
+            session.aggregator.seed(arr);
+            safeSend(ws, proto.candle(lastC, false));
+            maybeSendAnalysis(arr, false);
+          } catch (_) { /* ignore transient price errors */ }
+        };
+        session.priceTimer = setInterval(fastPrice, 5000);
+      }
     } else {
       // FALLBACK: simulator (real data unavailable, or user forced simulate).
       session.mode = session.forceSim
@@ -288,7 +314,7 @@ wss.on('connection', (ws) => {
     }
 
     try {
-      analysisObj = analyze(candles);
+      analysisObj = analyze(candles, { intraday });
     } catch (err) {
       analysisObj = null;
       safeSend(ws, proto.error('Initial analysis failed: ' + (err && err.message)));

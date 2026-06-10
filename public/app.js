@@ -57,7 +57,7 @@
     localization: {
       timeFormatter: localCrosshair, // crosshair / tooltip label
       // Show 2-decimal prices in the crosshair label so detail isn't lost.
-      priceFormatter: function (p) { return (isFinite(p) ? p.toFixed(2) : p); }
+      priceFormatter: function (p) { return Number.isFinite(p) ? p.toFixed(2) : ''; }
     },
     timeScale: {
       borderColor: '#253653',
@@ -66,8 +66,10 @@
       tickMarkFormatter: function (ts) { return localTick(ts); } // x-axis labels
     },
     crosshair: { mode: 1 },
-    // Allow zooming the price axis by dragging it, and wheel/pinch zoom on time.
-    handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
+    // Keep the price axis in AUTO mode so it always expands/shrinks to fit the
+    // visible candles as you zoom/scroll. (Dragging the price axis would switch
+    // it to manual and freeze the scale — so we disable price-axis drag.)
+    handleScale: { axisPressedMouseMove: { time: true, price: false }, mouseWheel: true, pinch: true },
     handleScroll: true
   });
 
@@ -102,10 +104,13 @@
   // EMA overlays
   var ema9Series = chart.addLineSeries({ color: '#5aa7ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
   var ema20Series = chart.addLineSeries({ color: '#ffbf47', lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
-  var ema50Series = chart.addLineSeries({ color: '#b388ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+  var ema50Series = chart.addLineSeries({ color: 'rgba(179,136,255,.7)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
   // Bollinger bands (lighter)
   var bbUpperSeries = chart.addLineSeries({ color: 'rgba(149,163,184,.55)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 });
   var bbLowerSeries = chart.addLineSeries({ color: 'rgba(149,163,184,.55)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 });
+  // Intraday overlays: session VWAP (white dashed reference line) + Supertrend (teal)
+  var vwapSeries = chart.addLineSeries({ color: '#f2f5fb', lineWidth: 2, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+  var stSeries = chart.addLineSeries({ color: '#36d1c4', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
 
   // Volume histogram on its own (hidden) price scale at the bottom
   var volumeSeries = chart.addHistogramSeries({
@@ -140,13 +145,28 @@
     }));
   }
 
+  // Drop any non-finite points so a stray NaN/null can't drag the price scale.
+  function finite(arr) {
+    return (arr || []).filter(function (p) { return p && Number.isFinite(p.value); });
+  }
+
   function setOverlays(overlays) {
     if (!overlays) return;
-    ema9Series.setData(overlays.ema9 || []);
-    ema20Series.setData(overlays.ema20 || []);
-    ema50Series.setData(overlays.ema50 || []);
-    bbUpperSeries.setData(overlays.bbUpper || []);
-    bbLowerSeries.setData(overlays.bbLower || []);
+    ema9Series.setData(finite(overlays.ema9));
+    ema20Series.setData(finite(overlays.ema20));
+    ema50Series.setData(finite(overlays.ema50));
+    bbUpperSeries.setData(finite(overlays.bbUpper));
+    bbLowerSeries.setData(finite(overlays.bbLower));
+    // Intraday-only overlays (empty in swing mode).
+    var vwapPts = finite(overlays.vwap);
+    var stPts = finite(overlays.supertrend);
+    var hasVwap = vwapPts.length > 0;
+    var hasSt = stPts.length > 0;
+    vwapSeries.setData(vwapPts);
+    stSeries.setData(stPts);
+    var lgV = $('lgVwap'), lgS = $('lgSt');
+    if (lgV) lgV.style.display = hasVwap ? '' : 'none';
+    if (lgS) lgS.style.display = hasSt ? '' : 'none';
   }
 
   // Map analysis.signal -> css class buy/sell/wait
@@ -207,6 +227,28 @@
       setText('bb', fmt(ind.bb.lower) + ' / ' + fmt(ind.bb.mid) + ' / ' + fmt(ind.bb.upper));
     } else {
       setText('bb', '--');
+    }
+
+    // Intraday setup tag + intraday-specific snapshot fields
+    var setupEl = $('setupTag');
+    var modeEl = $('signalMode');
+    if (analysis.mode === 'intraday') {
+      if (modeEl) modeEl.textContent = 'Intraday signal — VWAP · Supertrend · ORB confluence';
+      if (setupEl) { setupEl.textContent = analysis.setup || ''; setupEl.classList.toggle('hidden', !analysis.setup); }
+      var it = analysis.intraday || {};
+      if (Number.isFinite(ind.vwap) && Number.isFinite(analysis.price)) {
+        setText('vwapPos', analysis.price >= ind.vwap ? 'Above (bullish)' : 'Below (bearish)');
+      } else setText('vwapPos', '--');
+      if (it.supertrend && it.supertrend.trend) {
+        setText('stTrend', (it.supertrend.trend === 'up' ? 'Up' : 'Down') + (it.supertrend.flipped ? ' (just flipped)' : ''));
+      } else setText('stTrend', '--');
+      if (it.openingRange && isFinite(it.openingRange.low) && isFinite(it.openingRange.high)) {
+        setText('orbRange', money(it.openingRange.low) + ' – ' + money(it.openingRange.high));
+      } else setText('orbRange', '--');
+    } else {
+      if (modeEl) modeEl.textContent = 'Overall signal — chart patterns + indicators';
+      if (setupEl) setupEl.classList.add('hidden');
+      setText('vwapPos', '--'); setText('stTrend', '--'); setText('orbRange', '--');
     }
 
     // patterns table
@@ -542,6 +584,7 @@
     volumeSeries.setData([]);
     ema9Series.setData([]); ema20Series.setData([]); ema50Series.setData([]);
     bbUpperSeries.setData([]); bbLowerSeries.setData([]);
+    vwapSeries.setData([]); stSeries.setData([]);
   }
 
   // ---------- CSV backfill (visual only — server drives real analysis) ----------

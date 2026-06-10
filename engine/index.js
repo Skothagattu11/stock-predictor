@@ -6,6 +6,7 @@
 const indicators = require('./indicators');
 const { detectPatterns } = require('./patterns');
 const { score } = require('./scorer');
+const { scoreIntraday } = require('./intraday');
 
 const round2 = (n) => (Number.isFinite(n) ? Math.round(n * 100) / 100 : n);
 const lastValue = (series) =>
@@ -16,8 +17,9 @@ const lastValue = (series) =>
  * Requires >= 2 candles; with too few candles, returns a safe WAIT object
  * filling in whatever is computable. Never throws on short input.
  */
-function analyze(candles) {
+function analyze(candles, opts = {}) {
   const cs = Array.isArray(candles) ? candles : [];
+  const intraday = Boolean(opts && opts.intraday);
 
   if (cs.length < 2) {
     return safeWaitObject(cs);
@@ -33,7 +35,8 @@ function analyze(candles) {
   const macd = indicators.macd(cs);
   const boll = indicators.bollinger(cs);
   const atr = indicators.atr(cs);
-  const vwap = indicators.vwap(cs);
+  // Intraday uses session-anchored VWAP (resets each day); swing uses cumulative.
+  const vwap = intraday ? indicators.vwap(cs, { session: true }) : indicators.vwap(cs);
   const avgVol = indicators.avgVolume(cs);
   const lastVol = Number.isFinite(last.volume) ? last.volume : NaN;
   const volRatio =
@@ -53,16 +56,53 @@ function analyze(candles) {
     volRatio,
   };
 
-  // --- Patterns + scoring ------------------------------------------------
   const patterns = detectPatterns(cs);
-  const scored = score({ candles: cs, indicators: ind, patterns });
-
-  // --- Day range ---------------------------------------------------------
   const dayRange = computeDayRange(cs);
 
+  const overlays = {
+    ema9: ema9Series,
+    ema20: ema20Series,
+    ema50: ema50Series,
+    bbUpper: boll.upper,
+    bbMid: boll.mid,
+    bbLower: boll.lower,
+  };
+
+  // --- Scoring: intraday confluence vs swing model -----------------------
+  if (intraday) {
+    const st = indicators.supertrend(cs);
+    const orb = indicators.openingRange(cs, 30);
+    const scored = scoreIntraday({ candles: cs, indicators: ind, patterns, vwap, supertrend: st, orb });
+    overlays.vwap = indicators.vwapSeries(cs, { session: true });
+    overlays.supertrend = st.series;
+    return {
+      price: round2(last.close),
+      dayRange,
+      mode: 'intraday',
+      setup: scored.setup,
+      signal: scored.signal,
+      signalLabel: scored.signalLabel,
+      score: scored.score,
+      confidence: scored.confidence,
+      reasons: scored.reasons,
+      levels: scored.levels,
+      indicators: ind,
+      intraday: {
+        vwap,
+        supertrend: { trend: st.trend, flipped: st.flipped, value: st.value },
+        openingRange: orb,
+        setup: scored.setup,
+      },
+      patterns,
+      overlays,
+    };
+  }
+
+  const scored = score({ candles: cs, indicators: ind, patterns });
   return {
     price: round2(last.close),
     dayRange,
+    mode: 'swing',
     signal: scored.signal,
     signalLabel: scored.signalLabel,
     score: scored.score,
@@ -71,14 +111,7 @@ function analyze(candles) {
     levels: scored.levels,
     indicators: ind,
     patterns,
-    overlays: {
-      ema9: ema9Series,
-      ema20: ema20Series,
-      ema50: ema50Series,
-      bbUpper: boll.upper,
-      bbMid: boll.mid,
-      bbLower: boll.lower,
-    },
+    overlays,
   };
 }
 

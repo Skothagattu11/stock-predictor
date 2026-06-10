@@ -69,6 +69,7 @@
     .signalBox.sell{background:linear-gradient(135deg,rgba(255,92,108,.14),rgba(255,191,71,.08));border-color:rgba(255,92,108,.3)}
     .signalBox.wait{background:linear-gradient(135deg,rgba(255,191,71,.14),rgba(90,167,255,.06));border-color:rgba(255,191,71,.28)}
     .signalMain{font-size:30px;font-weight:900;letter-spacing:-.04em}
+    .setupTag{display:inline-block;margin-top:8px;padding:5px 11px;border-radius:999px;font-size:13px;font-weight:600;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:#dce6f5}
     .score{height:12px;background:#08101d;border-radius:999px;overflow:hidden;margin:14px 0}
     .score div{height:100%;background:linear-gradient(90deg,#ff5c6c,#ffbf47,#2fd17c);width:50%;transition:width .35s ease}
     .reason{display:grid;gap:10px;margin-top:12px}
@@ -272,6 +273,8 @@
           <span class="lg"><i style="background:#ffbf47"></i>EMA 20 (mid)</span>
           <span class="lg"><i style="background:#b388ff"></i>EMA 50 (slow)</span>
           <span class="lg"><i class="dash"></i>Bollinger Bands (20, 2σ)</span>
+          <span class="lg" id="lgVwap" style="display:none"><i style="background:#ffd479"></i>VWAP (session)</span>
+          <span class="lg" id="lgSt" style="display:none"><i style="background:#36d1c4"></i>Supertrend</span>
           <span class="lg"><i class="sq" style="background:rgba(90,167,255,.5)"></i>Volume</span>
         </div>
         <div id="chart"></div>
@@ -282,8 +285,9 @@
         <div class="card">
           <div class="cardBody">
             <div id="signalBox" class="signalBox wait">
-              <div class="note">Overall signal — chart patterns + indicators</div>
+              <div class="note" id="signalMode">Overall signal — chart patterns + indicators</div>
               <div class="signalMain" id="signalMain">WAIT</div>
+              <div class="setupTag hidden" id="setupTag"></div>
               <div class="score"><div id="scoreBar"></div></div>
               <div class="note" id="signalText">Waiting for stronger confirmation.</div>
             </div>
@@ -341,7 +345,10 @@
           <div><span>Volume pulse</span><b id="vol">--</b></div>
           <div><span>MACD (hist)</span><b id="macd">--</b></div>
           <div><span>ATR 14</span><b id="atr">--</b></div>
-          <div><span>VWAP</span><b id="vwap">--</b></div>
+          <div><span>VWAP (session)</span><b id="vwap">--</b></div>
+          <div><span>VWAP position</span><b id="vwapPos">--</b></div>
+          <div><span>Supertrend</span><b id="stTrend">--</b></div>
+          <div><span>Opening range</span><b id="orbRange">--</b></div>
           <div><span>Bollinger (L/M/U)</span><b id="bb">--</b></div>
         </div>
       </div>

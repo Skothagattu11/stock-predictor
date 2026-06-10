@@ -184,12 +184,20 @@ function atr(candles, period = 14) {
   return round2(atrVal);
 }
 
+// A gap between consecutive bars larger than this (seconds) is treated as a new
+// trading session — used to anchor intraday VWAP / opening range to each day.
+const SESSION_GAP = 2 * 3600;
+
 /**
- * Cumulative session VWAP = sum(typicalPrice*volume) / sum(volume),
- * typicalPrice = (high + low + close) / 3.
- * Returns NaN on empty input or zero total volume.
+ * VWAP = sum(typicalPrice*volume)/sum(volume), typicalPrice=(h+l+c)/3.
+ * By default cumulative over all candles. Pass { session:true } to reset at each
+ * session boundary (the standard intraday VWAP that day traders use).
  */
-function vwap(candles) {
+function vwap(candles, opts = {}) {
+  if (opts && opts.session) {
+    const s = vwapSeries(candles, { session: true });
+    return s.length ? s[s.length - 1].value : NaN;
+  }
   if (!Array.isArray(candles) || candles.length === 0) return NaN;
   let pv = 0;
   let vol = 0;
@@ -200,6 +208,132 @@ function vwap(candles) {
   }
   if (vol === 0) return NaN; // guard divide-by-zero
   return round2(pv / vol);
+}
+
+/**
+ * VWAP series [{time,value}]. session:true (default here) resets the cumulative
+ * sums whenever a session gap is detected, so it matches each day's anchored VWAP.
+ */
+function vwapSeries(candles, opts = {}) {
+  const session = opts.session !== false;
+  if (!Array.isArray(candles) || candles.length === 0) return [];
+  const out = [];
+  let pv = 0;
+  let vol = 0;
+  let prevTime = null;
+  for (const c of candles) {
+    if (session && prevTime != null && c.time - prevTime > SESSION_GAP) {
+      pv = 0;
+      vol = 0;
+    }
+    const tp = (c.high + c.low + c.close) / 3;
+    pv += tp * c.volume;
+    vol += c.volume;
+    // Only emit a point once volume exists — skip zero-volume (e.g. early
+    // pre-market) bars so the series has no NaN/0 points that break the scale.
+    if (vol > 0) out.push({ time: c.time, value: round2(pv / vol) });
+    prevTime = c.time;
+  }
+  return out;
+}
+
+/** Index where the most recent session begins (gap-based). */
+function sessionStartIndex(candles) {
+  if (!Array.isArray(candles) || candles.length === 0) return 0;
+  let start = 0;
+  for (let i = 1; i < candles.length; i++) {
+    if (candles[i].time - candles[i - 1].time > SESSION_GAP) start = i;
+  }
+  return start;
+}
+
+/**
+ * Opening Range = high/low of the first `minutes` of the most recent session.
+ * Classic intraday breakout reference. Returns {high, low} or NaNs.
+ */
+function openingRange(candles, minutes = 30) {
+  const empty = { high: NaN, low: NaN };
+  if (!Array.isArray(candles) || candles.length === 0) return empty;
+  const s = sessionStartIndex(candles);
+  const startT = candles[s].time;
+  let hi = -Infinity;
+  let lo = Infinity;
+  let n = 0;
+  for (let i = s; i < candles.length && candles[i].time < startT + minutes * 60; i++) {
+    if (Number.isFinite(candles[i].high)) hi = Math.max(hi, candles[i].high);
+    if (Number.isFinite(candles[i].low)) lo = Math.min(lo, candles[i].low);
+    n++;
+  }
+  if (n === 0 || hi === -Infinity) return empty;
+  return { high: round2(hi), low: round2(lo) };
+}
+
+/**
+ * Supertrend (ATR-based trend filter). Returns the latest line value, trend
+ * direction ('up'/'down'), whether it just flipped, and the full series.
+ */
+function supertrend(candles, period = 10, mult = 3) {
+  const empty = { value: NaN, trend: null, flipped: false, series: [] };
+  if (!Array.isArray(candles) || candles.length < period + 1) return empty;
+
+  // True range per bar.
+  const tr = new Array(candles.length).fill(0);
+  for (let i = 1; i < candles.length; i++) {
+    const c = candles[i];
+    const p = candles[i - 1];
+    tr[i] = Math.max(c.high - c.low, Math.abs(c.high - p.close), Math.abs(c.low - p.close));
+  }
+  // Wilder ATR series.
+  const atrArr = new Array(candles.length).fill(NaN);
+  let sum = 0;
+  for (let i = 1; i <= period; i++) sum += tr[i];
+  atrArr[period] = sum / period;
+  for (let i = period + 1; i < candles.length; i++) {
+    atrArr[i] = (atrArr[i - 1] * (period - 1) + tr[i]) / period;
+  }
+
+  const series = [];
+  const dir = new Array(candles.length).fill(0);
+  let prevFinalUpper = NaN;
+  let prevFinalLower = NaN;
+  let prevTrend = 1;
+  for (let i = period; i < candles.length; i++) {
+    const c = candles[i];
+    const hl2 = (c.high + c.low) / 2;
+    const a = atrArr[i];
+    const basicUpper = hl2 + mult * a;
+    const basicLower = hl2 - mult * a;
+
+    let finalUpper;
+    let finalLower;
+    let trend;
+    if (i === period) {
+      finalUpper = basicUpper;
+      finalLower = basicLower;
+      trend = c.close >= hl2 ? 1 : -1;
+    } else {
+      finalUpper =
+        basicUpper < prevFinalUpper || candles[i - 1].close > prevFinalUpper ? basicUpper : prevFinalUpper;
+      finalLower =
+        basicLower > prevFinalLower || candles[i - 1].close < prevFinalLower ? basicLower : prevFinalLower;
+      trend = prevTrend === 1 ? (c.close < finalLower ? -1 : 1) : (c.close > finalUpper ? 1 : -1);
+    }
+    const stVal = trend === 1 ? finalLower : finalUpper;
+    series.push({ time: c.time, value: round2(stVal) });
+    dir[i] = trend;
+    prevFinalUpper = finalUpper;
+    prevFinalLower = finalLower;
+    prevTrend = trend;
+  }
+
+  const lastIdx = candles.length - 1;
+  const flipped = dir[lastIdx] !== 0 && dir[lastIdx - 1] !== 0 && dir[lastIdx] !== dir[lastIdx - 1];
+  return {
+    value: series.length ? series[series.length - 1].value : NaN,
+    trend: dir[lastIdx] === 1 ? 'up' : dir[lastIdx] === -1 ? 'down' : null,
+    flipped,
+    series,
+  };
 }
 
 /** Mean volume of the last n candles. NaN if no candles. */
@@ -219,5 +353,9 @@ module.exports = {
   bollinger,
   atr,
   vwap,
+  vwapSeries,
+  sessionStartIndex,
+  openingRange,
+  supertrend,
   avgVolume,
 };
