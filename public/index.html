@@ -332,15 +332,15 @@
         <div class="cardBody">
           <div class="posForm">
             <div class="posGrid">
-              <label>Shares<input id="posShares" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 10" /></label>
-              <label>Buy price / share ($)<input id="posCost" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 300.00" /></label>
-              <label>Amount invested ($)<input id="posAmount" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 3000" /></label>
+              <label>Avg price / share ($)<input id="posCost" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 300.00" /></label>
+              <label>Total shares<input id="posShares" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 10" /></label>
+              <label>Order value ($)<input id="posAmount" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 3000" /></label>
             </div>
             <div class="posBtns">
               <button class="btn primary" id="posSave">Save position</button>
               <button class="btn" id="posRemove">Remove</button>
             </div>
-            <div class="note">Enter any two — the third is auto-calculated (amount = shares × price). Buy price per share powers the personalized buy/sell/hold call.</div>
+            <div class="note">Enter <b>any two</b> — the third is auto-calculated (order value = shares × price). The price/share drives the personalized buy/sell/hold call.</div>
           </div>
           <div id="posResult" class="posResult hidden">
             <div class="posRecBox" id="posRecBox">
@@ -348,13 +348,13 @@
               <div class="posRec" id="posRec">HOLD</div>
             </div>
             <div class="posStats mini">
-              <div><span>Amount invested</span><b id="posBasis">--</b></div>
+              <div><span>Order value</span><b id="posBasis">--</b></div>
               <div><span>Market value</span><b id="posValue">--</b></div>
               <div><span>Unrealized P/L</span><b id="posPL">--</b></div>
             </div>
             <div class="reason" id="posReasons"></div>
           </div>
-          <div id="posEmpty" class="note">Enter your buy price per share (and optionally the amount invested) to track profit/loss and get a personalized buy / sell / hold call for this ticker.</div>
+          <div id="posEmpty" class="note">Enter any two of order value, avg price/share, and total shares (or just the price/share) to track profit/loss and get a personalized buy / sell / hold call.</div>
         </div>
       </div>
       <div class="card">

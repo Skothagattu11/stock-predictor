@@ -718,21 +718,29 @@
     return { action: action, cls: cls, reasons: reasons };
   }
 
+  // Fill the input fields from the stored position. Called ONLY on symbol change
+  // / after save / remove — never on the live render tick, so it can't wipe what
+  // you're typing.
+  function fillPositionForm() {
+    var pos = getPosition(state.symbol);
+    var sharesEl = $('posShares'), amountEl = $('posAmount'), costEl = $('posCost');
+    if (pos) {
+      sharesEl.value = pos.shares > 0 ? fmtShares(pos.shares) : '';
+      costEl.value = pos.cost > 0 ? pos.cost : '';
+      amountEl.value = (pos.shares > 0 && pos.cost > 0) ? +(pos.shares * pos.cost).toFixed(2) : '';
+    } else {
+      sharesEl.value = ''; costEl.value = ''; amountEl.value = '';
+    }
+    state.formSymbol = state.symbol;
+  }
+
   function renderPositionCard() {
     var sym = state.symbol;
     setText('posSymbol', sym);
+    // Load this symbol's saved values into the form ONCE when the symbol changes;
+    // after that, leave the inputs alone so live ticks don't overwrite typing.
+    if (state.formSymbol !== sym) fillPositionForm();
     var pos = getPosition(sym);
-    var sharesEl = $('posShares'), amountEl = $('posAmount'), costEl = $('posCost');
-    var amountVal = (pos && pos.shares > 0 && pos.cost > 0) ? +(pos.shares * pos.cost).toFixed(2) : '';
-    if (pos) {
-      if (document.activeElement !== sharesEl) sharesEl.value = pos.shares > 0 ? fmtShares(pos.shares) : '';
-      if (document.activeElement !== costEl) costEl.value = pos.cost || '';
-      if (document.activeElement !== amountEl) amountEl.value = amountVal;
-    } else {
-      if (document.activeElement !== sharesEl) sharesEl.value = '';
-      if (document.activeElement !== costEl) costEl.value = '';
-      if (document.activeElement !== amountEl) amountEl.value = '';
-    }
     var hasPos = pos && (pos.shares > 0 || pos.cost > 0);
     $('posResult').classList.toggle('hidden', !hasPos);
     $('posEmpty').style.display = hasPos ? 'none' : '';
@@ -828,23 +836,25 @@
   });
 
   $('posSave').addEventListener('click', function () {
-    var S = parseFloat($('posShares').value);
-    var P = parseFloat($('posCost').value);   // buy price per share
-    var A = parseFloat($('posAmount').value); // total invested
+    var S = parseFloat($('posShares').value);   // total shares
+    var P = parseFloat($('posCost').value);     // avg price / share
+    var A = parseFloat($('posAmount').value);   // order value (amount invested)
     S = S > 0 ? S : null; P = P > 0 ? P : null; A = A > 0 ? A : null;
-    // Derive the missing value from the other two (amount = shares × price).
-    if (P == null && S && A) P = A / S;
-    if (S == null && P && A) S = A / P;
+    // Derive the missing value from any two (order value = shares × price).
+    if (P == null && S && A) P = A / S;          // shares + amount  -> price
+    else if (S == null && P && A) S = A / P;     // price  + amount  -> shares
+    else if (A == null && S && P) A = S * P;     // shares + price   -> amount (implicit)
     if (P == null && S == null) {
-      showBanner('Enter shares and/or a buy price per share (amount invested is optional).');
+      showBanner('Enter any two of: order value, avg price/share, total shares (or at least the price/share).');
       return;
     }
     upsertPosition(state.symbol, S || 0, P || 0);
+    fillPositionForm();                          // show the normalized/derived values
     renderPositionCard(); renderPortfolio(); refreshPortfolioPrices();
   });
   $('posRemove').addEventListener('click', function () {
     removePosition(state.symbol);
-    $('posShares').value = ''; $('posAmount').value = ''; $('posCost').value = '';
+    fillPositionForm();                          // clears the inputs
     renderPositionCard(); renderPortfolio();
   });
   $('portfolioRows').addEventListener('click', function (e) {
