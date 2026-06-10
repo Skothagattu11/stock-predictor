@@ -178,29 +178,60 @@
 
   function render(analysis) {
     if (!analysis) return;
-    var cls = signalClass(analysis.signal);
-    var label = analysis.signalLabel || analysis.signal || 'WAIT';
 
-    // signal box
+    // Generic market read (the stock's signal).
+    var mktCls = signalClass(analysis.signal);
+    var mktLabel = analysis.signalLabel || analysis.signal || 'WAIT';
+
+    // If you hold this ticker, the HEADLINE becomes your personalized call
+    // (HOLD / SELL / TAKE-PROFIT…) and the market read drops to a sub-line.
+    var pos = getPosition(state.symbol);
+    var personal = pos && pos.cost > 0 && Number.isFinite(analysis.price);
+    var headLabel, headCls, headReason, modeText, subText, headReasons;
+    if (personal) {
+      var rec = computeRecommendation(analysis, pos);
+      headLabel = rec.action;
+      headCls = rec.cls;
+      headReasons = rec.reasons;
+      headReason = rec.reasons[0] || '';
+      modeText = 'Your position — ' + state.symbol + ' · what to do with your shares';
+      subText = 'Market signal: ' + mktLabel + ' · ' + (analysis.score | 0) + '/100';
+    } else {
+      headLabel = mktLabel;
+      headCls = mktCls;
+      headReasons = analysis.reasons || [];
+      headReason = headReasons[0] || 'Waiting for stronger confirmation.';
+      modeText = analysis.mode === 'intraday'
+        ? 'Intraday signal — VWAP · Supertrend · ORB confluence'
+        : 'Overall signal — chart patterns + indicators';
+      subText = analysis.mode === 'intraday' ? (analysis.setup || '') : '';
+    }
+
+    // signal box (headline)
     var box = $('signalBox');
-    box.className = 'signalBox ' + cls;
-    setText('signalMain', label);
+    box.className = 'signalBox ' + headCls;
+    setText('signalMode', modeText);
+    setText('signalMain', headLabel);
     $('scoreBar').style.width = Math.max(0, Math.min(100, analysis.score || 0)) + '%';
-    setText('signalText', (analysis.reasons && analysis.reasons[0]) || 'Waiting for stronger confirmation.');
+    setText('signalText', headReason);
+    var setupEl = $('setupTag');
+    if (setupEl) {
+      if (subText) { setupEl.textContent = subText; setupEl.classList.remove('hidden'); }
+      else setupEl.classList.add('hidden');
+    }
 
-    // KPIs
+    // KPIs (the "Current signal" KPI always shows the generic market read)
     setText('price', money(analysis.price));
     if (analysis.dayRange) {
       setText('range', money(analysis.dayRange.low) + '–' + money(analysis.dayRange.high));
     }
     var kpi = $('signalKpi');
-    kpi.textContent = label;
-    kpi.className = cls === 'buy' ? 'green' : cls === 'sell' ? 'red' : 'amber';
+    kpi.textContent = mktLabel;
+    kpi.className = mktCls === 'buy' ? 'green' : mktCls === 'sell' ? 'red' : 'amber';
     setText('confKpi', (analysis.confidence === undefined || analysis.confidence === null) ? '--%' : Math.round(analysis.confidence) + '%');
 
-    // reasons
-    var reasons = analysis.reasons || [];
-    $('reasons').innerHTML = reasons.slice(0, 6).map(function (r) {
+    // reasons (headline's reasons)
+    $('reasons').innerHTML = headReasons.slice(0, 6).map(function (r) {
       return '<div>' + escapeHtml(r) + '</div>';
     }).join('');
 
@@ -229,12 +260,8 @@
       setText('bb', '--');
     }
 
-    // Intraday setup tag + intraday-specific snapshot fields
-    var setupEl = $('setupTag');
-    var modeEl = $('signalMode');
+    // Intraday-specific snapshot fields (headline/mode are set above).
     if (analysis.mode === 'intraday') {
-      if (modeEl) modeEl.textContent = 'Intraday signal — VWAP · Supertrend · ORB confluence';
-      if (setupEl) { setupEl.textContent = analysis.setup || ''; setupEl.classList.toggle('hidden', !analysis.setup); }
       var it = analysis.intraday || {};
       if (Number.isFinite(ind.vwap) && Number.isFinite(analysis.price)) {
         setText('vwapPos', analysis.price >= ind.vwap ? 'Above (bullish)' : 'Below (bearish)');
@@ -246,8 +273,6 @@
         setText('orbRange', money(it.openingRange.low) + ' – ' + money(it.openingRange.high));
       } else setText('orbRange', '--');
     } else {
-      if (modeEl) modeEl.textContent = 'Overall signal — chart patterns + indicators';
-      if (setupEl) setupEl.classList.add('hidden');
       setText('vwapPos', '--'); setText('stTrend', '--'); setText('orbRange', '--');
     }
 
@@ -259,12 +284,13 @@
         '</td><td><span class="badge ' + sig + '">' + sig.toUpperCase() + '</span></td></tr>';
     }).join('');
 
-    // signal history — log only when the label actually changes
-    if (label !== state.lastSignalLabel) {
+    // signal history — log ONLY when the headline call actually changes
+    // (not every tick), so it's a calm record of real recommendation changes.
+    if (headLabel !== state.lastSignalLabel) {
       if (state.lastSignalLabel !== null) {
-        addHistory(label, cls);
+        addHistory(headLabel, headCls);
       }
-      state.lastSignalLabel = label;
+      state.lastSignalLabel = headLabel;
     }
 
     // personalized position tracking uses the latest analysis + live price
