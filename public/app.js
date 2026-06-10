@@ -825,11 +825,14 @@
   // Auto-calculate the empty field when the other two are filled (amount = shares × price).
   function recalcPosInputs() {
     var sEl = $('posShares'), pEl = $('posCost'), aEl = $('posAmount');
-    var S = parseFloat(sEl.value), P = parseFloat(pEl.value), A = parseFloat(aEl.value);
-    S = S > 0 ? S : null; P = P > 0 ? P : null; A = A > 0 ? A : null;
-    if (S && P && A == null && document.activeElement !== aEl) aEl.value = +(S * P).toFixed(2);
-    else if (S && A && P == null && document.activeElement !== pEl) pEl.value = +(A / S).toFixed(4);
-    else if (P && A && S == null && document.activeElement !== sEl) sEl.value = +(A / P).toFixed(4);
+    var num = function (v) { var n = parseFloat(v); return n > 0 ? n : null; };
+    var S = num(sEl.value), P = num(pEl.value), A = num(aEl.value);
+    var f = document.activeElement;
+    // Re-derive (live, on every keystroke) the ONE field the user is NOT editing
+    // from the other two. Never overwrite the field being typed in.
+    if (P && S && f !== aEl) aEl.value = +(S * P).toFixed(2);        // price + shares -> order value
+    else if (P && A && f !== sEl) sEl.value = +(A / P).toFixed(4);   // price + order  -> shares
+    else if (S && A && f !== pEl) pEl.value = +(A / S).toFixed(4);   // shares + order -> price
   }
   ['posShares', 'posCost', 'posAmount'].forEach(function (id) {
     $(id).addEventListener('input', recalcPosInputs);
