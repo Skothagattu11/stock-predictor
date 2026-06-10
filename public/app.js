@@ -785,6 +785,17 @@
     if (tr && tr.getAttribute('data-sym')) selectSymbol(tr.getAttribute('data-sym'));
   });
 
+  // ---------- Live clock (always reflects the current date/time) ----------
+  function tickClock() {
+    var d = new Date();
+    setText('clock', d.toLocaleString([], {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }));
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
   // ---------- Boot ----------
   setConnBadge(false);
   setModeBadge('simulated');

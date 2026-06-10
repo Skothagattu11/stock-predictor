@@ -88,6 +88,18 @@ This repo includes a `render.yaml` blueprint. Two ways:
 > Note: Render's free tier sleeps after inactivity (first hit after idle is slow),
 > and outbound calls to Yahoo/Finnhub run from Render's servers.
 
+## Live coverage & market hours
+
+US stocks only trade during market hours, so prices can't move overnight/weekends.
+To stay live as long as possible:
+- **Extended hours included** — intraday charts show **pre-market (from 4:00 AM ET)
+  and after-hours (to 8:00 PM ET)**, not just the 9:30–16:00 regular session.
+- A **live header clock** always shows the current date/time, and the status badge
+  reflects the exact session: **Open / Pre-market / After-hours / Closed**.
+- When closed, it shows the last real session and **keeps polling**, resuming the
+  instant trading reopens.
+- For a truly 24/7 live chart, use a crypto symbol (e.g. `BTC-USD`).
+
 ## Timezone
 
 Market-open detection uses **America/New_York** (US Eastern, 09:30–16:00, Mon–Fri,

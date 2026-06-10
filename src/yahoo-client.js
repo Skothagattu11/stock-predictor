@@ -71,12 +71,15 @@ function clampRange(interval, range) {
 async function fetchCandles(symbol, interval, range) {
   const iv = normInterval(interval);
   const effRange = clampRange(iv, range);
+  // Include pre-market / after-hours for intraday so the chart stays live through
+  // extended hours (~4am–8pm ET), not just the regular 9:30–16:00 session.
+  const prePost = INTERVALS[iv].intraday ? 'true' : 'false';
   const url =
     'https://query1.finance.yahoo.com/v8/finance/chart/' +
     encodeURIComponent(symbol) +
     '?interval=' + INTERVALS[iv].y +
     '&range=' + RANGES[effRange].y +
-    '&includePrePost=false';
+    '&includePrePost=' + prePost;
 
   const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
   if (!res.ok) throw new Error('Yahoo HTTP ' + res.status);

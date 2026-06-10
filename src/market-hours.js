@@ -30,8 +30,10 @@ function nyParts(date) {
   return { weekday, minutes: hour * 60 + minute };
 }
 
-const OPEN_MIN = 9 * 60 + 30; // 09:30
-const CLOSE_MIN = 16 * 60; // 16:00
+const PRE_MIN = 4 * 60;        // 04:00 pre-market open
+const OPEN_MIN = 9 * 60 + 30;  // 09:30 regular open
+const CLOSE_MIN = 16 * 60;     // 16:00 regular close
+const AFTER_MIN = 20 * 60;     // 20:00 after-hours close
 const WEEKDAYS = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
 
 function isMarketOpen(date = new Date()) {
@@ -40,8 +42,24 @@ function isMarketOpen(date = new Date()) {
   return minutes >= OPEN_MIN && minutes < CLOSE_MIN;
 }
 
+// Regular session OR extended hours (pre-market / after-hours) — i.e. any time
+// US equities actually trade and live prices can move.
+function marketSession(date = new Date()) {
+  const { weekday, minutes } = nyParts(date);
+  if (!WEEKDAYS.has(weekday)) return 'closed';
+  if (minutes >= OPEN_MIN && minutes < CLOSE_MIN) return 'open';
+  if (minutes >= PRE_MIN && minutes < OPEN_MIN) return 'pre';
+  if (minutes >= CLOSE_MIN && minutes < AFTER_MIN) return 'after';
+  return 'closed';
+}
+
+// True whenever trades can flow (regular + extended hours).
+function isTradingNow(date = new Date()) {
+  return marketSession(date) !== 'closed';
+}
+
 function marketStatus(date = new Date()) {
   return isMarketOpen(date) ? 'open' : 'closed';
 }
 
-module.exports = { isMarketOpen, marketStatus };
+module.exports = { isMarketOpen, marketSession, isTradingNow, marketStatus };

@@ -10,7 +10,7 @@ const { WebSocketServer } = require('ws');
 
 const config = require('./config');
 const proto = require('./ws-protocol');
-const { isMarketOpen } = require('./market-hours');
+const { isMarketOpen, marketSession } = require('./market-hours');
 const { CandleAggregator } = require('./candle-aggregator');
 const simulator = require('./simulator');
 const yahoo = require('./yahoo-client');
@@ -216,16 +216,24 @@ wss.on('connection', (ws) => {
     if (usedReal) {
       session.connected = true;
       const clampNote = effRange !== range ? ' (range adjusted to ' + effRange + ' for ' + interval + ')' : '';
+      const sess = marketSession(); // 'open' | 'pre' | 'after' | 'closed'
       if (intraday) {
-        session.mode = marketOpen ? proto.MODE.LIVE : proto.MODE.CLOSED;
-        session.statusMsg = (marketOpen
-          ? 'Live — real ' + interval + ' candles, ~12s refresh'
-          : 'Market closed — real ' + interval + ' candles (last session)') + clampNote;
+        if (sess === 'closed') {
+          session.mode = proto.MODE.CLOSED;
+          session.statusMsg = 'Market closed — real ' + interval + ' candles (last session); auto-resumes at next open.' + clampNote;
+        } else {
+          session.mode = proto.MODE.LIVE;
+          const label = sess === 'open' ? 'market open'
+            : (sess === 'pre' ? 'pre-market (extended hours)' : 'after-hours (extended)');
+          session.statusMsg = 'Live — ' + label + ' · real ' + interval + ' candles' + clampNote;
+        }
       } else {
         session.mode = proto.MODE.LIVE;
         session.statusMsg = 'Real ' + interval + ' candles · ' + effRange + ' (auto-refresh)' + clampNote;
       }
-      const refreshMs = intraday ? REAL_REFRESH_MS : 60000;
+      // Refresh fast while trades can flow (regular OR extended hours); slower
+      // overnight/weekends, but keep polling so it resumes the moment trading reopens.
+      const refreshMs = intraday ? (sess === 'closed' ? 60000 : REAL_REFRESH_MS) : 60000;
 
       // Re-pull real candles periodically; merge the latest/new bars into chart.
       const refresh = async () => {
