@@ -935,6 +935,124 @@
     $('stMin').textContent = el.classList.contains('min') ? '+' : '–';
   })();
 
+  // ---------- Floating AI assistant (Gemini via /api/chat) ----------
+  (function () {
+    var el = $('chatbot');
+    if (!el) return;
+    var head = $('chatHead'), msgsEl = $('chatMsgs'), inputEl = $('chatInput');
+    var KEY = 'csd_chat_v1';
+    var convo = []; // {role:'user'|'assistant', text}
+    try {
+      var s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (s) {
+        if (Number.isFinite(s.left) && Number.isFinite(s.top)) {
+          el.style.left = s.left + 'px'; el.style.top = s.top + 'px';
+          el.style.right = 'auto'; el.style.bottom = 'auto';
+        }
+        if (s.min === false) el.classList.remove('min');
+      }
+    } catch (e) {}
+    $('chatMin').textContent = el.classList.contains('min') ? '+' : '–';
+
+    function save() {
+      var r = el.getBoundingClientRect();
+      try { localStorage.setItem(KEY, JSON.stringify({ left: Math.round(r.left), top: Math.round(r.top), min: el.classList.contains('min') })); } catch (e) {}
+    }
+    function point(e) { var t = e.touches && e.touches[0]; return { x: t ? t.clientX : e.clientX, y: t ? t.clientY : e.clientY }; }
+    var drag = null;
+    function down(e) {
+      if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea')) return;
+      var p = point(e), r = el.getBoundingClientRect();
+      drag = { dx: p.x - r.left, dy: p.y - r.top };
+      el.style.right = 'auto'; el.style.bottom = 'auto';
+      document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+      document.addEventListener('touchmove', mv, { passive: false }); document.addEventListener('touchend', up);
+      e.preventDefault();
+    }
+    function mv(e) {
+      if (!drag) return; var p = point(e);
+      el.style.left = Math.max(6, Math.min(window.innerWidth - el.offsetWidth - 6, p.x - drag.dx)) + 'px';
+      el.style.top = Math.max(6, Math.min(window.innerHeight - 44, p.y - drag.dy)) + 'px';
+      e.preventDefault();
+    }
+    function up() {
+      drag = null;
+      document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up);
+      document.removeEventListener('touchmove', mv); document.removeEventListener('touchend', up);
+      save();
+    }
+    head.addEventListener('mousedown', down);
+    head.addEventListener('touchstart', down, { passive: false });
+    $('chatMin').addEventListener('click', function () {
+      el.classList.toggle('min');
+      $('chatMin').textContent = el.classList.contains('min') ? '+' : '–';
+      save();
+      if (!el.classList.contains('min')) inputEl.focus();
+    });
+
+    function mdLite(t) {
+      var e = escapeHtml(t);
+      e = e.replace(/`([^`]+)`/g, '<code>$1</code>');
+      e = e.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+      e = e.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      e = e.replace(/\n/g, '<br>');
+      return e;
+    }
+    function addMsg(role, html, cls) {
+      var d = document.createElement('div');
+      d.className = 'chatMsg ' + (cls || (role === 'user' ? 'user' : 'bot'));
+      d.innerHTML = html;
+      msgsEl.appendChild(d);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+      return d;
+    }
+    function chatContext() {
+      var a = state.lastAnalysis || {};
+      var pos = getPosition(state.symbol);
+      var ind = a.indicators || {};
+      return {
+        ticker: state.symbol, interval: state.interval, range: state.range,
+        price: a.price, marketSignal: a.signalLabel, score: a.score, setup: a.setup, mode: a.mode,
+        indicators: { rsi: ind.rsi, ema9: ind.ema9, ema20: ind.ema20, ema50: ind.ema50, macd: ind.macd, atr: ind.atr, vwap: ind.vwap, volRatio: ind.volRatio },
+        levels: a.levels,
+        patterns: (a.patterns || []).map(function (p) { return p.name + ' (' + p.signal + ')'; }),
+        yourPosition: pos ? { shares: pos.shares, avgPricePerShare: pos.cost } : null
+      };
+    }
+    function send() {
+      var q = (inputEl.value || '').trim();
+      if (!q) return;
+      inputEl.value = ''; inputEl.style.height = 'auto';
+      addMsg('user', escapeHtml(q));
+      convo.push({ role: 'user', text: q });
+      var thinking = addMsg('bot', 'Thinking…', 'bot think');
+      fetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: convo, context: chatContext(), webSearch: $('chatWeb').checked })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          thinking.remove();
+          if (d && d.text) {
+            var html = mdLite(d.text);
+            if (d.sources && d.sources.length) {
+              html += '<span class="src">Sources: ' + d.sources.slice(0, 5).map(function (s) {
+                return '<a href="' + encodeURI(s.uri) + '" target="_blank" rel="noopener">' + escapeHtml(s.title || 'link') + '</a>';
+              }).join('') + '</span>';
+            }
+            addMsg('bot', html);
+            if (!d.needsKey) convo.push({ role: 'assistant', text: d.text });
+          } else {
+            addMsg('bot', escapeHtml((d && d.error) || 'No response.'));
+          }
+        })
+        .catch(function () { thinking.remove(); addMsg('bot', 'Could not reach the assistant. Please try again.'); });
+    }
+    $('chatSend').addEventListener('click', send);
+    inputEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+    inputEl.addEventListener('input', function () { this.style.height = 'auto'; this.style.height = Math.min(120, this.scrollHeight) + 'px'; });
+  })();
+
   // ---------- Live clock (always reflects the current date/time) ----------
   function tickClock() {
     var d = new Date();

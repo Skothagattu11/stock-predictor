@@ -172,12 +172,86 @@ function createRouter() {
     }
   });
 
+  // POST /api/chat -> { text, sources:[{title,uri}] }
+  // Proxies to Google Gemini (key stays server-side). Optional Google Search
+  // grounding + the live dashboard context the browser attaches.
+  router.post('/chat', async (req, res) => {
+    if (!config.hasGemini) {
+      return res.status(200).json({
+        needsKey: true,
+        text: 'The AI assistant isn’t configured yet. Set GEMINI_API_KEY (from aistudio.google.com) in the server environment to enable it.',
+      });
+    }
+    try {
+      const body = req.body || {};
+      const messages = Array.isArray(body.messages) ? body.messages.slice(-10) : [];
+      const ctx = body.context || null;
+      const webSearch = body.webSearch !== false;
+
+      const sys =
+        'You are a concise, helpful trading assistant embedded in a live day-trading dashboard. ' +
+        'Answer the user using the LIVE DASHBOARD CONTEXT below when relevant (ticker, signal, indicators, ' +
+        "the user's position and P/L, patterns). Explain reasoning briefly and in plain language. " +
+        'You are NOT a licensed financial advisor — when you give a buy/sell/hold view, add a short caution ' +
+        'that it is not financial advice. Prefer short paragraphs and bullet points.' +
+        (ctx ? '\n\nLIVE DASHBOARD CONTEXT (JSON):\n' + JSON.stringify(ctx) : '');
+
+      const contents = messages.map((m) => ({
+        role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
+        parts: [{ text: String(m.text || '') }],
+      }));
+      if (!contents.length) return res.status(400).json({ error: 'no message' });
+
+      const payload = {
+        system_instruction: { parts: [{ text: sys }] },
+        contents,
+        generationConfig: { temperature: 0.4 },
+      };
+      if (webSearch) payload.tools = [{ google_search: {} }];
+
+      const url =
+        'https://generativelanguage.googleapis.com/v1beta/models/' +
+        encodeURIComponent(config.GEMINI_MODEL) +
+        ':generateContent?key=' + encodeURIComponent(config.GEMINI_API_KEY);
+
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || ('Gemini error ' + r.status);
+        return res.status(502).json({ error: msg });
+      }
+
+      const cand = data && data.candidates && data.candidates[0];
+      const parts = (cand && cand.content && cand.content.parts) || [];
+      const text = parts.map((p) => p.text || '').join('').trim() || '(no answer)';
+
+      // Grounding citations (if Google Search was used).
+      const sources = [];
+      const gm = cand && cand.groundingMetadata;
+      const chunks = gm && (gm.groundingChunks || gm.grounding_chunks);
+      if (Array.isArray(chunks)) {
+        chunks.forEach((c) => {
+          const w = c && c.web;
+          if (w && w.uri) sources.push({ title: w.title || w.uri, uri: w.uri });
+        });
+      }
+      return res.json({ text, sources });
+    } catch (err) {
+      return res.status(502).json({ error: 'Chat request failed: ' + String(err && err.message || err) });
+    }
+  });
+
   // GET /api/health
   router.get('/health', (req, res) => {
     res.json({
       ok: true,
       mode: config.hasKey ? 'live' : 'simulated',
       hasKey: config.hasKey,
+      hasGemini: config.hasGemini,
     });
   });
 

@@ -174,7 +174,31 @@
     .sg-chip.sell{color:var(--red);background:rgba(255,92,108,.12);border:1px solid rgba(255,92,108,.3)}
     .sg-chip.wait{color:var(--amber);background:rgba(255,191,71,.12);border:1px solid rgba(255,191,71,.3)}
     .sg-foot{margin-top:10px;color:var(--muted);font-size:11.5px;line-height:1.45}
-    @media(max-width:620px){.sticky{top:auto;bottom:14px;right:14px;width:300px}}
+    @media(max-width:620px){.sticky{top:auto;bottom:14px;left:14px;right:auto;width:300px}}
+    /* floating AI assistant */
+    .chatbot{position:fixed;bottom:20px;right:22px;width:370px;max-width:calc(100vw - 24px);z-index:80;background:linear-gradient(180deg,rgba(22,32,52,.99),rgba(11,17,29,.99));border:1px solid rgba(255,255,255,.14);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.55);overflow:hidden;display:flex;flex-direction:column}
+    .chatbot .chatHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;cursor:grab;background:linear-gradient(135deg,rgba(53,178,255,.18),rgba(47,209,124,.1));border-bottom:1px solid var(--line);user-select:none;touch-action:none}
+    .chatbot .chatHead:active{cursor:grabbing}
+    .chatbot .chatHead h4{margin:0;font-size:13px}
+    .chatbot .btns button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 9px;border-radius:8px}
+    .chatbot .btns button:hover{background:rgba(255,255,255,.12);color:#fff}
+    .chatbot.min{width:auto}
+    .chatbot.min .chatBody{display:none}
+    .chatbot.min .chatHead{border-bottom:0}
+    .chatMsgs{padding:12px;max-height:46vh;overflow:auto;display:flex;flex-direction:column;gap:10px;font-size:13px}
+    .chatMsg{padding:9px 12px;border-radius:14px;line-height:1.5;max-width:92%;word-wrap:break-word;overflow-wrap:anywhere}
+    .chatMsg.user{align-self:flex-end;background:linear-gradient(135deg,#246bfe,#35b2ff);color:#fff;border-bottom-right-radius:4px}
+    .chatMsg.bot{align-self:flex-start;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:#dce6f5;border-bottom-left-radius:4px}
+    .chatMsg.bot code{background:rgba(0,0,0,.35);padding:1px 5px;border-radius:6px;font-size:12px}
+    .chatMsg .src{display:block;margin-top:8px;font-size:11px;color:var(--muted);border-top:1px solid rgba(255,255,255,.08);padding-top:6px}
+    .chatMsg .src a{color:#9cc4ff;display:inline-block;margin-right:8px}
+    .chatMsg.think{opacity:.65;font-style:italic}
+    .chatInputRow{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+    .chatInputRow textarea{flex:1;resize:none;max-height:120px;min-height:38px;background:#0a1220;border:1px solid #263550;color:var(--text);border-radius:12px;padding:9px 12px;font-size:13px;font-family:inherit}
+    .chatInputRow .btn{padding:9px 14px}
+    .chatWeb{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);white-space:nowrap;user-select:none;cursor:pointer}
+    .chatWeb input{accent-color:#35b2ff}
+    @media(max-width:620px){.chatbot{right:10px;left:10px;bottom:10px;width:auto}.chatbot.min{left:auto;width:auto}}
     /* ---------- Responsive ---------- */
     /* Narrow desktop: indicator snapshot gets cramped at 3 cols in the side rail */
     @media(max-width:1180px){.mini{grid-template-columns:repeat(2,1fr)}}
@@ -454,6 +478,24 @@
       <div class="sg-row"><span class="sg-chip sell">CUT LOSS</span><span class="d">Price hit your stop zone.</span></div>
 
       <div class="sg-foot">Indicators behind the score: VWAP · Supertrend · Opening-Range · EMA 9/20 · RSI · MACD · volume · candle patterns.</div>
+    </div>
+  </div>
+
+  <!-- Floating AI assistant (Gemini) -->
+  <div id="chatbot" class="chatbot min">
+    <div class="chatHead" id="chatHead">
+      <h4>🤖 Ask the assistant</h4>
+      <div class="btns"><button class="chatMin" id="chatMin" title="Minimize / expand">+</button></div>
+    </div>
+    <div class="chatBody">
+      <div class="chatMsgs" id="chatMsgs">
+        <div class="chatMsg bot">Hi! Ask me anything about the chart, a signal, your position, or the market — I can use web search and read your live dashboard data. Not financial advice.</div>
+      </div>
+      <div class="chatInputRow">
+        <label class="chatWeb" title="Let the assistant use Google Search"><input type="checkbox" id="chatWeb" checked> Web</label>
+        <textarea id="chatInput" rows="1" placeholder="Ask a question… (Enter to send)"></textarea>
+        <button class="btn primary" id="chatSend">Send</button>
+      </div>
     </div>
   </div>
 
