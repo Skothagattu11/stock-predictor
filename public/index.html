@@ -155,6 +155,26 @@
     .banner{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:80;background:linear-gradient(135deg,rgba(255,92,108,.95),rgba(255,120,90,.95));color:#fff;padding:12px 18px;border-radius:14px;box-shadow:var(--shadow);font-size:14px;max-width:90vw;transition:opacity .3s}
     .footer{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}
     .hidden{display:none}
+    /* draggable signal-guide sticky note */
+    .sticky{position:fixed;top:96px;right:22px;width:330px;max-width:calc(100vw - 24px);z-index:75;background:linear-gradient(180deg,rgba(22,32,52,.98),rgba(12,18,30,.98));border:1px solid rgba(255,255,255,.14);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden}
+    .sticky .stickyHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;cursor:grab;background:rgba(255,255,255,.06);border-bottom:1px solid var(--line);user-select:none;touch-action:none}
+    .sticky .stickyHead:active{cursor:grabbing}
+    .sticky .stickyHead h4{margin:0;font-size:13px;letter-spacing:.02em}
+    .sticky .btns button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 9px;border-radius:8px}
+    .sticky .btns button:hover{background:rgba(255,255,255,.12);color:#fff}
+    .sticky .stickyBody{padding:12px 14px;max-height:62vh;overflow:auto;font-size:13px}
+    .sticky.min{width:auto}
+    .sticky.min .stickyBody{display:none}
+    .sticky.min .stickyHead{border-bottom:0}
+    .sg-sec{margin:0 0 4px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+    .sg-row{display:grid;grid-template-columns:auto 1fr;gap:9px;align-items:start;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+    .sg-row .d{color:#cdd8ea;line-height:1.4;font-size:12.5px}
+    .sg-chip{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10.5px;font-weight:800;white-space:nowrap;letter-spacing:.01em}
+    .sg-chip.buy{color:var(--green);background:rgba(47,209,124,.12);border:1px solid rgba(47,209,124,.3)}
+    .sg-chip.sell{color:var(--red);background:rgba(255,92,108,.12);border:1px solid rgba(255,92,108,.3)}
+    .sg-chip.wait{color:var(--amber);background:rgba(255,191,71,.12);border:1px solid rgba(255,191,71,.3)}
+    .sg-foot{margin-top:10px;color:var(--muted);font-size:11.5px;line-height:1.45}
+    @media(max-width:620px){.sticky{top:auto;bottom:14px;right:14px;width:300px}}
     /* ---------- Responsive ---------- */
     /* Narrow desktop: indicator snapshot gets cramped at 3 cols in the side rail */
     @media(max-width:1180px){.mini{grid-template-columns:repeat(2,1fr)}}
@@ -410,6 +430,33 @@
 
     <div class="footer">Educational dashboard only. Use position sizing, stop losses, and your own judgment. Do not treat any signal as financial advice.</div>
   </div>
+
+  <!-- Draggable, minimizable "signal guide" sticky note -->
+  <div id="cheatsheet" class="sticky">
+    <div class="stickyHead" id="stickyHead">
+      <h4>📌 Signal guide</h4>
+      <div class="btns">
+        <button class="stMin" id="stMin" title="Minimize / expand">–</button>
+      </div>
+    </div>
+    <div class="stickyBody">
+      <div class="sg-sec">Market signal (the stock, score 0–100)</div>
+      <div class="sg-row"><span class="sg-chip buy">BUY / LONG ≥64</span><span class="d">Confluence favors going long.</span></div>
+      <div class="sg-row"><span class="sg-chip sell">SELL / SHORT ≤36</span><span class="d">Confluence favors getting out / shorting.</span></div>
+      <div class="sg-row"><span class="sg-chip wait">WAIT 37–63</span><span class="d">No clean edge — stay out.</span></div>
+
+      <div class="sg-sec" style="margin-top:12px">Your position call (what to do with your shares)</div>
+      <div class="sg-row"><span class="sg-chip wait">HOLD</span><span class="d">Trend still supports the position — no action.</span></div>
+      <div class="sg-row"><span class="sg-chip buy">HOLD / ADD</span><span class="d">Bullish &amp; you're underwater — hold (add only with a plan).</span></div>
+      <div class="sg-row"><span class="sg-chip buy">TAKE PROFIT</span><span class="d">Price hit your target zone — lock gains.</span></div>
+      <div class="sg-row"><span class="sg-chip sell">SELL / TRIM</span><span class="d">Bearish while you're up — protect gains.</span></div>
+      <div class="sg-row"><span class="sg-chip sell">REDUCE / TIGHTEN STOP</span><span class="d">Bearish &amp; you're down — cut or tighten stop.</span></div>
+      <div class="sg-row"><span class="sg-chip sell">CUT LOSS</span><span class="d">Price hit your stop zone.</span></div>
+
+      <div class="sg-foot">Indicators behind the score: VWAP · Supertrend · Opening-Range · EMA 9/20 · RSI · MACD · volume · candle patterns.</div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

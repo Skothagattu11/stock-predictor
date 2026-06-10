@@ -854,6 +854,74 @@
     if (tr && tr.getAttribute('data-sym')) selectSymbol(tr.getAttribute('data-sym'));
   });
 
+  // ---------- Draggable / minimizable signal-guide sticky note ----------
+  (function () {
+    var el = $('cheatsheet');
+    if (!el) return;
+    var head = $('stickyHead');
+    var KEY = 'csd_sticky_v1';
+    try {
+      var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (saved) {
+        if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+          el.style.left = saved.left + 'px';
+          el.style.top = saved.top + 'px';
+          el.style.right = 'auto';
+        }
+        if (saved.min) el.classList.add('min');
+      }
+    } catch (e) {}
+
+    function save() {
+      var r = el.getBoundingClientRect();
+      try {
+        localStorage.setItem(KEY, JSON.stringify({ left: Math.round(r.left), top: Math.round(r.top), min: el.classList.contains('min') }));
+      } catch (e) {}
+    }
+    function point(e) {
+      var t = e.touches && e.touches[0];
+      return { x: t ? t.clientX : e.clientX, y: t ? t.clientY : e.clientY };
+    }
+    var drag = null;
+    function down(e) {
+      if (e.target.closest('button')) return; // let the minimize button work
+      var p = point(e);
+      var r = el.getBoundingClientRect();
+      drag = { dx: p.x - r.left, dy: p.y - r.top };
+      el.style.right = 'auto';
+      document.addEventListener('mousemove', moveE);
+      document.addEventListener('mouseup', up);
+      document.addEventListener('touchmove', moveE, { passive: false });
+      document.addEventListener('touchend', up);
+      e.preventDefault();
+    }
+    function moveE(e) {
+      if (!drag) return;
+      var p = point(e);
+      var maxL = window.innerWidth - el.offsetWidth - 6;
+      var maxT = window.innerHeight - 44;
+      el.style.left = Math.max(6, Math.min(maxL, p.x - drag.dx)) + 'px';
+      el.style.top = Math.max(6, Math.min(maxT, p.y - drag.dy)) + 'px';
+      e.preventDefault();
+    }
+    function up() {
+      drag = null;
+      document.removeEventListener('mousemove', moveE);
+      document.removeEventListener('mouseup', up);
+      document.removeEventListener('touchmove', moveE);
+      document.removeEventListener('touchend', up);
+      save();
+    }
+    head.addEventListener('mousedown', down);
+    head.addEventListener('touchstart', down, { passive: false });
+    $('stMin').addEventListener('click', function () {
+      el.classList.toggle('min');
+      $('stMin').textContent = el.classList.contains('min') ? '+' : '–';
+      save();
+    });
+    $('stMin').textContent = el.classList.contains('min') ? '+' : '–';
+  })();
+
   // ---------- Live clock (always reflects the current date/time) ----------
   function tickClock() {
     var d = new Date();
