@@ -1019,20 +1019,27 @@
         yourPosition: pos ? { shares: pos.shares, avgPricePerShare: pos.cost } : null
       };
     }
+    var sending = false;
     function send() {
+      if (sending) return;                       // in-flight lock — no rapid re-sends
       var q = (inputEl.value || '').trim();
       if (!q) return;
+      if (q.length > 1500) q = q.slice(0, 1500);  // cap input length (matches server)
+      sending = true;
+      var btn = $('chatSend'); btn.disabled = true; btn.textContent = '…';
       inputEl.value = ''; inputEl.style.height = 'auto';
       addMsg('user', escapeHtml(q));
       convo.push({ role: 'user', text: q });
+      if (convo.length > 16) convo = convo.slice(-16); // bound client history
       var thinking = addMsg('bot', 'Thinking…', 'bot think');
+      var done = function () { sending = false; btn.disabled = false; btn.textContent = 'Send'; };
       fetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: convo, context: chatContext(), webSearch: $('chatWeb').checked })
       })
         .then(function (r) { return r.json(); })
         .then(function (d) {
-          thinking.remove();
+          thinking.remove(); done();
           if (d && d.text) {
             var html = mdLite(d.text);
             if (d.sources && d.sources.length) {
@@ -1046,7 +1053,7 @@
             addMsg('bot', escapeHtml((d && d.error) || 'No response.'));
           }
         })
-        .catch(function () { thinking.remove(); addMsg('bot', 'Could not reach the assistant. Please try again.'); });
+        .catch(function () { thinking.remove(); done(); addMsg('bot', 'Could not reach the assistant. Please try again.'); });
     }
     $('chatSend').addEventListener('click', send);
     inputEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });

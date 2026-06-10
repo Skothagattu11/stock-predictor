@@ -7,6 +7,42 @@ const express = require('express');
 const config = require('./config');
 const yahoo = require('./yahoo-client');
 
+// ---- AI assistant abuse guardrails (token-cost protection) ----------------
+const CHAT_LIMITS = {
+  perMin: parseInt(process.env.CHAT_PER_MIN, 10) || 8,          // per IP / minute
+  perDayIp: parseInt(process.env.CHAT_PER_DAY_IP, 10) || 80,    // per IP / day
+  perDayGlobal: parseInt(process.env.CHAT_PER_DAY, 10) || 800,  // all users / day
+  maxMessages: 8,            // only the last N turns are sent
+  maxMsgChars: 1500,         // per message, truncated
+  maxContextChars: 3000,     // dashboard context JSON, truncated
+  maxOutputTokens: parseInt(process.env.CHAT_MAX_OUTPUT_TOKENS, 10) || 700,
+};
+const ipHits = new Map();    // ip -> [timestamps]
+const globalDay = { day: '', count: 0 };
+const ymd = () => new Date().toISOString().slice(0, 10);
+
+function chatRateCheck(ip) {
+  const now = Date.now();
+  const d = ymd();
+  if (globalDay.day !== d) { globalDay.day = d; globalDay.count = 0; }
+  if (globalDay.count >= CHAT_LIMITS.perDayGlobal) {
+    return { ok: false, code: 503, msg: 'The assistant has reached its daily usage limit. Please try again tomorrow.' };
+  }
+  if (ipHits.size > 5000) ipHits.clear(); // crude memory cap
+  const dayAgo = now - 86400000, minAgo = now - 60000;
+  let arr = (ipHits.get(ip) || []).filter((t) => t > dayAgo);
+  if (arr.filter((t) => t > minAgo).length >= CHAT_LIMITS.perMin) {
+    return { ok: false, code: 429, msg: 'Too many questions in a short time — please wait a few seconds.' };
+  }
+  if (arr.length >= CHAT_LIMITS.perDayIp) {
+    return { ok: false, code: 429, msg: "You've reached today's question limit for the assistant." };
+  }
+  arr.push(now);
+  ipHits.set(ip, arr);
+  globalDay.count++;
+  return { ok: true };
+}
+
 const FINNHUB_REST = 'https://finnhub.io/api/v1';
 
 const MOCK_SYMBOLS = [
@@ -182,10 +218,25 @@ function createRouter() {
         text: 'The AI assistant isn’t configured yet. Set GEMINI_API_KEY (from aistudio.google.com) in the server environment to enable it.',
       });
     }
+    // Abuse guardrail: rate-limit by client IP + global daily cap.
+    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'unknown';
+    const gate = chatRateCheck(ip);
+    if (!gate.ok) {
+      return res.status(gate.code).json({ error: gate.msg, rateLimited: true });
+    }
     try {
       const body = req.body || {};
-      const messages = Array.isArray(body.messages) ? body.messages.slice(-10) : [];
-      const ctx = body.context || null;
+      // Cap turns + per-message length to bound input tokens.
+      const messages = (Array.isArray(body.messages) ? body.messages : [])
+        .slice(-CHAT_LIMITS.maxMessages)
+        .map((m) => ({ role: m.role, text: String(m.text || '').slice(0, CHAT_LIMITS.maxMsgChars) }));
+      // Cap the attached dashboard context size.
+      let ctx = body.context || null;
+      if (ctx) {
+        let ctxStr = JSON.stringify(ctx);
+        if (ctxStr.length > CHAT_LIMITS.maxContextChars) ctxStr = ctxStr.slice(0, CHAT_LIMITS.maxContextChars);
+        ctx = ctxStr;
+      }
       const webSearch = body.webSearch !== false;
 
       const sys =
@@ -193,8 +244,8 @@ function createRouter() {
         'Answer the user using the LIVE DASHBOARD CONTEXT below when relevant (ticker, signal, indicators, ' +
         "the user's position and P/L, patterns). Explain reasoning briefly and in plain language. " +
         'You are NOT a licensed financial advisor — when you give a buy/sell/hold view, add a short caution ' +
-        'that it is not financial advice. Prefer short paragraphs and bullet points.' +
-        (ctx ? '\n\nLIVE DASHBOARD CONTEXT (JSON):\n' + JSON.stringify(ctx) : '');
+        'that it is not financial advice. Keep answers short — a few sentences or bullets.' +
+        (ctx ? '\n\nLIVE DASHBOARD CONTEXT (JSON):\n' + ctx : '');
 
       const contents = messages.map((m) => ({
         role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
@@ -205,7 +256,7 @@ function createRouter() {
       const payload = {
         system_instruction: { parts: [{ text: sys }] },
         contents,
-        generationConfig: { temperature: 0.4 },
+        generationConfig: { temperature: 0.4, maxOutputTokens: CHAT_LIMITS.maxOutputTokens },
       };
       if (webSearch) payload.tools = [{ google_search: {} }];
 

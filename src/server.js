@@ -88,7 +88,8 @@ async function fetchSeedPrice(symbol) {
 // ---- HTTP / Express -------------------------------------------------------
 
 const app = express();
-app.use(express.json());
+app.set('trust proxy', true); // correct client IP behind Render's proxy (rate limiting)
+app.use(express.json({ limit: '64kb' })); // cap request body size
 app.use('/api', createRouter());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
