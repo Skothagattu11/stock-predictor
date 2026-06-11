@@ -906,7 +906,8 @@ COPY pyproject.toml ./
 RUN pip install --no-cache-dir -e .
 COPY app ./app
 EXPOSE 8000
-CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form so Render's injected $PORT is honored; defaults to 8000 locally.
+CMD uvicorn app.api:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
 - [ ] **Step 2: Create `.dockerignore`**
@@ -963,6 +964,18 @@ git commit -m "chore(sidecar): containerize quant-py + docs"
 - [ ] The prediction is computed with **zero LLM calls** and `source == "quant"`.
 - [ ] `.env` was never staged (verify `git status --short`); Phase 1 needs no secrets.
 - [ ] Branch `feat/phase-1-sidecar` ready to merge to `main`.
+
+## Implementation deltas (applied during execution — controller-approved)
+
+Corrections made to the plan's code while building; the intent is unchanged:
+1. **RSI flat-series → 50, not 100.** `rsi()` adds a second guard so a no-movement series
+   (no gains *and* no losses) returns 50; all-gains still returns 100.
+2. **No tie-pushes-bearish.** In `score_intraday`, the VWAP / EMA / opening-momentum signals are
+   *skipped* on exact ties (price == vwap, ema_fast == ema_slow, first_mom == 0) instead of defaulting
+   negative — consistent with the "centered at 0" intent; a flat series now scores Neutral.
+3. **Endpoint guard kept at 20 bars.** The endpoint test feeds a 40-bar synthetic frame (not the 3-row
+   Yahoo parsing fixture), so the `len(df) < 20` guard stays meaningful and no NaN reaches output.
+4. **Dockerfile honors `$PORT`** (shell-form CMD) for Render web-service deploys; defaults to 8000 locally.
 
 ## Self-review notes
 
