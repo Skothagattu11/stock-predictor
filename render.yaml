@@ -34,3 +34,10 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     autoDeploy: true
+    envVars:
+      - key: FRED_API_KEY
+        sync: false
+      - key: FMP_API_KEY
+        sync: false
+      - key: FINNHUB_API_KEY
+        sync: false
