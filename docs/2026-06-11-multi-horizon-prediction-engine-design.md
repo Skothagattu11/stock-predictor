@@ -1,7 +1,8 @@
 # Multi-Horizon, Multi-Model Prediction Engine — Design
 
 **Date:** 2026-06-11
-**Status:** Approved — router stack locked (Vercel AI SDK + in-house consensus); next: implementation plan
+**Status:** Approved — router = Vercel AI SDK + in-house consensus; **Python quant/ML sidecar from v1**;
+data = OpenBB aggregator **+** direct providers; multi-predictor ensemble. Next: implementation plan.
 **Supersedes prediction sections of:** `2026-06-09-candle-signal-dashboard-design.md`
 
 ## Problem
@@ -129,22 +130,88 @@ future extensions drop-in rather than rewrites:
 Design rule: nothing downstream of the router (consensus, validation, cache, UI) may assume a fixed set of
 providers — provider list is config-driven.
 
-## Backend architecture (single Render instance, in-memory)
+## Data, tooling & mitigations (finalized)
+
+Framing: this is a **market-analysis / prediction tool, not a trade-execution engine**. The bar is
+**calibration** ("when it says 65%, it's right ~65% of the time"), not dollar precision. That removes a
+whole class of failure modes (slippage, fills, fees, tick-latency) and makes ~70–80% of the gaps
+mitigable. The residual ~20–30% is genuine market randomness / tail risk — handled by *displaying*
+uncertainty, never hiding it.
+
+### Data sources (use OpenBB **and** direct providers, side by side)
+Decision: wire **both** so outputs can be cross-checked and the best source chosen per field. Reliable,
+mostly-free; willing to spend a *minimal* amount where it clearly earns its keep.
+
+| Input | Source | Tier |
+|---|---|---|
+| Aggregation layer (one integration → ~100 sources) | **OpenBB Platform** (REST API) | Free (bring keys) |
+| Fundamentals, estimates, earnings calendar, sentiment, insider | **Finnhub** (key already held) + **FMP** | Free; FMP Starter ≈ $19–29/mo if depth/limits needed |
+| Macro / regime context (yield curve, rates, VIX, unemployment) | **FRED** | Free |
+| Options-implied **expected move** (honest, market-priced ranges) | Yahoo / CBOE options chains | Free |
+| Intraday history backfill (beyond Yahoo's ~7–30d of 1-min) | **Alpaca** (free market data); accumulate our own 1-min store daily | Free; optional Polygon Starter ≈ $29/mo if richer history needed |
+| News + finance-tuned sentiment | OpenBB/Finnhub news → **FinBERT** scoring | Free |
+
+Rule: **the LLM never sources numbers** — all hard figures come from these feeds; the LLM only narrates
+and is reconciled against them.
+
+### Curated repo set (tight and justified — "best and required", not a kitchen sink)
+
+| Purpose | Repo | Why this one |
+|---|---|---|
+| Data aggregation | **[OpenBB Platform](https://github.com/OpenBB-finance/OpenBB)** | One open-source integration unifies ~100 reliable sources; REST API consumable from Node. |
+| AI-quant ML platform + validation | **[microsoft/qlib](https://github.com/microsoft/qlib)** | Full pipeline: features → model (LightGBM/etc.) → **walk-forward backtest**. Home of the validated ML predictor. |
+| Indicators (in the sidecar) | **[pandas-ta](https://github.com/twopirllc/pandas-ta)** | Comprehensive, pandas-native; computes the quant-core features efficiently in Python. |
+| Statistical forecaster (a *non-LLM* predictor voice) | **[Nixtla StatsForecast](https://github.com/Nixtla/statsforecast)** | Fast, reliable, MIT; the independent statistical vote in the multi-predictor ensemble. |
+| Calibrated uncertainty / honest ranges | **[MAPIE](https://github.com/scikit-learn-contrib/MAPIE)** | scikit-learn-contrib conformal prediction → distribution-free intervals + calibration. |
+| Finance news sentiment | **[FinBERT](https://huggingface.co/ProsusAI/finbert)** | Purpose-built finance sentiment model; replaces the LLM guessing sentiment. |
+
+Deliberately **not** added as dependencies: `mlfinlab` (now partly commercial) — instead implement the two
+pieces we actually need (**triple-barrier labeling** + **purged K-fold/embargo**) as a small in-house
+module (well-documented, ~100 LOC) and lean on qlib's own backtest. Keeps the dep set lean and fully OSS.
+
+### Multi-predictor ensemble (the "works in parallel with other predictors" requirement)
+Extend consensus from *multi-LLM* to **multi-predictor** — independent voices that fail *independently*,
+which is what fixes the correlated-LLM-consensus risk:
 
 ```
-src/
+  Quant score (rule-based, pandas-ta) ┐
+  Statistical forecaster (StatsForecast) ┤
+  ML model (qlib, when trained)          ┤──► Meta-consensus + divergence flag
+  Analyst consensus (Finnhub/FMP)        ┤    (disagreement = honest low-conviction)
+  LLM ensemble (OpenAI/Claude/Gemini/Perplexity) ┘
+```
+
+## Backend architecture (Node orchestrator + Python quant/ML sidecar)
+
+Two services, deployed side by side (Render): a **Node orchestrator/UI/LLM** service and a **Python
+quant/ML/data** sidecar. Node owns the user-facing app and the LLM ensemble; Python owns everything the
+mature quant/ML ecosystem does best.
+
+```
+NODE  (src/ — orchestrator, LLM, UI, cache)
   agents/        intraday · longTerm · position · portfolio
-                 (each: data → quant → context → ensemble → validate)
-  quant/         indicators, signals, portfolioMath  (pure, unit-tested; grows from engine/)
+                 (each: call py-sidecar for quant/predictors → context → LLM ensemble → consensus → validate)
   context/       compact structured snapshot + snapshot hash
   llm/
     router.js        job→provider map, ensemble fan-out, retry/fallback/circuit-breaker, budget meter
     adapters/        openai · anthropic · gemini · perplexity  (via Vercel AI SDK)
-    consensus.js     aggregate N model outputs → headline + agreement/divergence
-    schemas.js       JSON/Zod schema per mode (forced structured output)
-    validate.js      schema check + number reconciliation
+    consensus.js     aggregate predictors + models → headline + agreement/divergence
+    schemas.js       Zod schema per mode (forced structured output)
+    validate.js      schema check + number reconciliation (echoed numbers vs sidecar values)
   cache/         lru-cache w/ single-flight + stale-while-revalidate, TTL by horizon
   scheduler/     background quant-only trend snapshots for watchlist/portfolio
+  sidecar.js     typed HTTP client for the Python service
+
+PYTHON  (services/quant-py/ — FastAPI)
+  data/          OpenBB client + direct providers (finnhub, fmp, fred, yahoo-options, alpaca)
+  indicators/    pandas-ta feature computation
+  models/        regime classifier · intraday · outlook · position · portfolio  (rule-based v1)
+  ml/            qlib pipeline (features→train→walk-forward) + triple-barrier labels + purged-CV (in-house)
+  forecast/      StatsForecast statistical-predictor voice
+  uncertainty/   MAPIE conformal intervals + probability calibration
+  sentiment/     FinBERT news sentiment
+  store/         accumulated 1-min history (grows daily; training data)
+  api.py         REST endpoints consumed by Node
 ```
 
 ### Data flow
@@ -154,11 +221,12 @@ Widget request
            ─ hit (stale) ─► return stale + background revalidate  (SWR)
            ─ miss/changed
   → (single-flight: one fetch per key)
-  → Data feed → Quant engine → Context builder
+  → Python sidecar: data feeds → indicators → quant cores + statistical + ML + analyst predictors
+                    → calibrated ranges (MAPIE) → structured snapshot + snapshot hash
        └ snapshot-hash unchanged? → reuse last LLM result (NO LLM CALL)
        → LLM router (ensemble fan-out) → retry → fallback → circuit-breaker
-            └ budget hit / all down → DEGRADE to pure-quant templated output
-       → Validate + number reconciliation (re-ask on fail)
+            └ budget hit / all down / sidecar-only → DEGRADE to pure-quant templated output
+       → Consensus aggregator (all predictors + all models) → Validate + number reconciliation
        → Cache.set(TTL by horizon) → Widget JSON
 ```
 
@@ -203,22 +271,27 @@ Split the cheap layer from the expensive one:
 
 ## Phased implementation
 
-1. **Quant cores** — grow `engine/` into the four deterministic models + unit tests (no LLM yet; pure-quant
-   output already useful and is the degradation path).
-2. **LLM router + adapters + ensemble + consensus** — provider-agnostic (Vercel AI SDK), schema-forced,
-   number-reconciled; ensemble fan-out + consensus aggregator.
-3. **Caching / scheduler** — single-flight, SWR, TTL-by-horizon, background quant-only snapshots.
-4. **UI** — horizon ribbon, Market/Your split, four cards with honesty primitives, consensus panel.
-5. **Calibration logging** — predictions + outcomes + Brier scoring.
+1. **Python sidecar + data layer** — FastAPI service; OpenBB + direct providers (Finnhub/FMP/FRED/Yahoo
+   options/Alpaca); pandas-ta indicators; the four **rule-based quant cores** + unit tests; REST API.
+   (Pure-quant output is already useful and is the degradation path.)
+2. **Node ↔ sidecar wiring + caching/scheduler** — typed HTTP client; single-flight, SWR, TTL-by-horizon;
+   background quant-only snapshots; begin accumulating the 1-min history store.
+3. **LLM router + ensemble + multi-predictor consensus** — Vercel AI SDK adapters, schema-forced,
+   number-reconciled; consensus over **all predictor voices + all LLM models** with divergence flagging.
+4. **Calibrated uncertainty + sentiment** — MAPIE conformal ranges + probability calibration; FinBERT
+   sentiment; StatsForecast statistical-predictor voice; analyst-consensus voice.
+5. **UI** — horizon ribbon, Market/Your split, four cards with honesty primitives, multi-predictor panel.
+6. **Calibration logging** — predictions + outcomes + Brier scoring (also the training dataset).
+7. **Validated ML model (qlib)** — once enough 1-min history has accumulated: features → train →
+   walk-forward (purged-CV/triple-barrier) → serve as another predictor voice; benchmark vs the rest.
 
-## Scope / deferrals
+## Scope / sequencing
 
-- **ML meta-model deferred** (XGBoost/LightGBM + triple-barrier labeling + meta-labeling + purged K-fold +
-  embargo + walk-forward). It needs bulk historical 1-min data Yahoo won't provide and carries real
-  overfitting/data-pipeline risk. Ship the **rule-based regime-gated scorer first** — it captures most of
-  the documented intraday edge. Revisit once we accumulate our own 1-min history.
-- Multi-instance scaling (Redis-backed cache/circuit-breaker/budget) deferred; in-memory is correct for a
-  single Render instance.
+- **ML meta-model is now in scope** (via qlib) but **sequenced last** — it needs accumulated 1-min history
+  and rigorous walk-forward validation to avoid overfitting/data-mining bias. Rule-based cores ship first
+  and remain the degradation path; the ML model is added as one more predictor voice, never the sole one.
+- Multi-instance scaling (Redis-backed cache/circuit-breaker/budget) deferred; in-memory is correct for
+  the single Node instance. The Python sidecar is a second Render service (within minimal-cost budget).
 
 ## Security constraints (persisted)
 

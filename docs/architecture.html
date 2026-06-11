@@ -74,7 +74,7 @@
 <body>
 <div class="wrap">
   <h1>Multi-Horizon · Multi-Model Prediction Engine</h1>
-  <p class="sub">Numbers in code · words from the models · same agent across every provider · consensus on top. (Design — 2026-06-11)</p>
+  <p class="sub">Node orchestrator + Python quant/ML sidecar · numbers in code, words from the models · many predictors in parallel, consensus on top. (Design — 2026-06-11)</p>
 
   <div class="legend">
     <span><i class="dot" style="background:var(--data)"></i>Data</span>
@@ -89,19 +89,21 @@
 
     <!-- DATA -->
     <div class="layer">
-      <div class="ltitle"><i class="dot" style="background:var(--data)"></i>1 · Data sources <span class="badge">cheap · cached · keyless where possible</span></div>
+      <div class="ltitle"><i class="dot" style="background:var(--data)"></i>1 · Data sources <span class="badge">OpenBB aggregator + direct providers · mostly free, minimal paid</span></div>
       <div class="row">
-        <div class="card accent-data"><h4>Yahoo Finance candles</h4><p>1m / 5m / 1D OHLCV + volume. Live near-real-time price poll.</p></div>
-        <div class="card accent-data"><h4>Web-grounded fundamentals & news</h4><p>Pulled on demand via grounded LLM (Perplexity / Gemini) — cited, dated.</p></div>
-        <div class="card accent-data"><h4>User position & portfolio</h4><p>Cost basis, size, saved holdings (localStorage → server context).</p></div>
+        <div class="card accent-data"><h4>OpenBB Platform <small style="color:var(--mut)">(aggregator)</small></h4><p>One integration → ~100 reliable sources via REST. Cross-checked against direct providers.</p>
+          <div class="pillrow"><span class="pill">Finnhub</span><span class="pill">FMP</span><span class="pill">FRED macro</span><span class="pill">Yahoo</span></div></div>
+        <div class="card accent-data"><h4>Markets & history</h4><p>Yahoo 1m/5m/1D + live price poll · Alpaca + own 1-min store for history · Yahoo/CBOE options → implied expected-move.</p></div>
+        <div class="card accent-data"><h4>Fundamentals · news · macro</h4><p>Finnhub/FMP estimates, earnings, insider · FinBERT sentiment · FRED rates/VIX/yield curve. <b style="color:var(--ink)">Hard numbers, not LLM-sourced.</b></p></div>
+        <div class="card accent-data"><h4>User position & portfolio</h4><p>Cost basis, size, saved holdings.</p></div>
       </div>
     </div>
     <div class="arrow"><svg viewBox="0 0 22 30"><path d="M11 0v22m0 0l-6-6m6 6l6-6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></div>
 
     <!-- QUANT -->
     <div class="layer">
-      <div class="ltitle"><i class="dot" style="background:var(--quant)"></i>2 · Quant engine — pure code, computes every number
-        <span class="tag" style="background:#13351f;color:var(--quant)">NO LLM · auditable · unit-tested</span></div>
+      <div class="ltitle"><i class="dot" style="background:var(--quant)"></i>2 · Quant engine <span style="color:var(--mut);font-weight:500;text-transform:none;letter-spacing:0">— Python sidecar (FastAPI)</span>
+        <span class="tag" style="background:#13351f;color:var(--quant)">pandas-ta · qlib · NO LLM · auditable</span></div>
       <div class="row">
         <div class="card accent-quant"><h4>A · Intraday <small style="color:var(--mut)">(Today)</small></h4>
           <p>Regime classifier → volume-filtered ORB · first-30-min momentum · VWAP · ATR stops.</p>
@@ -138,8 +140,16 @@
 
     <!-- CONSENSUS -->
     <div class="layer">
-      <div class="ltitle"><i class="dot" style="background:var(--consensus)"></i>4 · Consensus aggregator + validation
-        <span class="tag" style="background:#2a1c40;color:var(--consensus)">~150 LOC in-house</span></div>
+      <div class="ltitle"><i class="dot" style="background:var(--consensus)"></i>4 · Multi-predictor consensus + validation
+        <span class="tag" style="background:#2a1c40;color:var(--consensus)">independent voices → meta-consensus</span></div>
+      <div class="row" style="margin-bottom:12px">
+        <div class="provider"><b style="color:var(--quant)">Quant score</b><small>rule-based</small></div>
+        <div class="provider"><b style="color:var(--quant)">Statistical</b><small>StatsForecast</small></div>
+        <div class="provider future"><b style="color:var(--future)">ML model</b><small>qlib · when trained</small><span class="ftag">seq. last</span></div>
+        <div class="provider"><b style="color:var(--quant)">Analyst consensus</b><small>Finnhub/FMP</small></div>
+        <div class="provider"><b style="color:var(--llm)">LLM ensemble</b><small>4 models</small></div>
+      </div>
+      <div class="fanline">▼ &nbsp; voices fail independently → agreement actually means something</div>
       <div class="row">
         <div class="card accent-consensus"><h4>Agreement scoring</h4><p>Majority stance + agreement %. Models split → flagged as <b style="color:var(--ink)">low conviction</b> (divergence is a signal).</p></div>
         <div class="card accent-consensus"><h4>Number reconciliation</h4><p>Any figure a model echoes is checked against the quant value — mismatch is stripped / re-asked. No hallucinated numbers reach the UI.</p></div>
@@ -175,7 +185,7 @@
         <div class="card accent-ui"><h4>D · Portfolio fit</h4><p>Overlap / concentration / diversification.</p></div>
       </div>
       <div class="row">
-        <div class="card accent-ui"><h4>Model-consensus panel</h4><p>Every provider's call side-by-side + consensus headline — the multi-model feature made visible.</p></div>
+        <div class="card accent-ui"><h4>Multi-predictor panel</h4><p>Every voice side-by-side — quant · statistical · ML · analyst · each LLM — + consensus headline and divergence.</p></div>
       </div>
       <div class="note"><svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" stroke="var(--mut2)" fill="none"/></svg>
         Every card carries the same honesty primitives: <span class="pill">HorizonBadge</span> <span class="pill">ConfidenceMeter (banded)</span> <span class="pill">FreshnessTag</span> <span class="pill">AIBadge · sources</span> — color never alone (WCAG).</div>
@@ -201,7 +211,7 @@
     </div>
   </div>
 
-  <footer>Spec: <span class="kbd">docs/2026-06-11-multi-horizon-prediction-engine-design.md</span> · Router: Vercel AI SDK + in-house consensus · Heavy ML model deferred to a later phase.</footer>
+  <footer>Spec: <span class="kbd">docs/2026-06-11-multi-horizon-prediction-engine-design.md</span> · Node + Python sidecar · Router: Vercel AI SDK · Data: OpenBB + Finnhub/FMP/FRED/options · ML (qlib) sequenced last on accumulated history.</footer>
 </div>
 </body>
 </html>
