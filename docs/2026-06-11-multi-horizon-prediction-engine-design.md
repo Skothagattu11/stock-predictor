@@ -1,7 +1,7 @@
 # Multi-Horizon, Multi-Model Prediction Engine — Design
 
 **Date:** 2026-06-11
-**Status:** Approved (design); pending router-stack confirmation + implementation plan
+**Status:** Approved — router stack locked (Vercel AI SDK + in-house consensus); next: implementation plan
 **Supersedes prediction sections of:** `2026-06-09-candle-signal-dashboard-design.md`
 
 ## Problem
