@@ -1,0 +1,1 @@
+{"optionChain":{"result":[{"quote":{"regularMarketPrice":200.0},"expirationDates":[1750464000],"options":[{"expirationDate":1750464000,"calls":[{"strike":195.0,"impliedVolatility":0.30},{"strike":200.0,"impliedVolatility":0.25},{"strike":205.0,"impliedVolatility":0.28}],"puts":[{"strike":200.0,"impliedVolatility":0.27}]}]}]}}
