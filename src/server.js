@@ -93,6 +93,25 @@ app.use(express.json({ limit: '64kb' })); // cap request body size
 app.use('/api', createRouter());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// ---- Phase 4: sidecar wiring + predict routes + scheduler ------------------
+const { createSidecar } = require('./sidecar');
+const { TtlCache } = require('./cache');
+const { createPredictService } = require('./predict-service');
+const { createPredictRouter } = require('./predict-routes');
+const { createScheduler } = require('./scheduler');
+
+const sidecar = createSidecar({ baseUrl: config.QUANT_SIDECAR_URL });
+const predictCache = new TtlCache();
+const predictService = createPredictService({ sidecar, cache: predictCache });
+app.use('/api/predict', createPredictRouter({ service: predictService }));
+
+const WATCHLIST = (process.env.WATCHLIST || 'AAPL,MSFT,NVDA,SPY').split(',').map((s) => s.trim()).filter(Boolean);
+if (config.QUANT_SIDECAR_URL) {
+  createScheduler({ service: predictService, symbols: WATCHLIST,
+                    log: (m) => console.log('[scheduler]', m) }).start();
+}
+// ---------------------------------------------------------------------------
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/stream' });
 
