@@ -11,8 +11,8 @@ caching, scheduler, and UI. **Python** (`services/quant-py/`, FastAPI) owns data
 the four quant cores, the statistical/ML predictors, conformal/calibration, and sentiment. Node calls the
 sidecar over HTTP. Numbers always come from the sidecar; the LLM only narrates and is reconciled.
 
-**Tech Stack:** Node 20 + Express + `ws` + Vercel AI SDK (`ai`) + Zod; Python 3.11 + FastAPI + uvicorn +
-pandas + pandas-ta + httpx + pydantic; OpenBB Platform + Finnhub/FMP/FRED/Yahoo-options/Alpaca; StatsForecast,
+**Tech Stack:** Node 20 + Express + `ws` + Vercel AI SDK (`ai`) + Zod; Python 3.13 + FastAPI + uvicorn +
+pandas + numpy (indicators computed directly; no pandas-ta) + httpx + pydantic; OpenBB Platform + Finnhub/FMP/FRED/Yahoo-options/Alpaca; StatsForecast,
 MAPIE, FinBERT, qlib (later). Tests: `pytest` (Python), `node --test` (Node).
 
 **Spec:** `docs/2026-06-11-multi-horizon-prediction-engine-design.md` · **Diagram:** `docs/architecture.html`
@@ -54,7 +54,7 @@ candle-signal-dashboard/
 
 | # | Phase | Delivers (testable on its own) | Depends on | Plan doc |
 |---|-------|-------------------------------|------------|----------|
-| 1 | **Sidecar foundation + intraday core** | FastAPI service; Yahoo candle client; pandas-ta indicators; regime classifier; intraday quant core; `/predict/intraday/{symbol}` returns calibrated pure-quant output | — | `2026-06-11-phase-1-python-sidecar-foundation.md` ✅ |
+| 1 | **Sidecar foundation + intraday core** | FastAPI service; Yahoo candle client; indicators (direct); regime classifier; intraday quant core; `/predict/intraday/{symbol}` returns calibrated pure-quant output | — | `2026-06-11-phase-1-python-sidecar-foundation.md` ✅ |
 | 2 | **Data layer expansion** | Provider interface + OpenBB, Finnhub, FMP, FRED, Yahoo-options, Alpaca adapters; fundamentals/macro/implied-move into a shared context; cross-check harness | 1 | TBD |
 | 3 | **Remaining quant cores** | Outlook (regime gate + momentum + earnings-revision + quality + valuation), Position (P/L-aware), Portfolio (correlation/concentration) cores + endpoints | 1, 2 | TBD |
 | 4 | **Node ↔ sidecar + caching/scheduler** | Typed Node sidecar client; LRU cache w/ single-flight + SWR + TTL-by-horizon; background quant-only snapshot scheduler; 1-min history store | 1 | TBD |

@@ -6,7 +6,7 @@
 
 **Architecture:** A standalone FastAPI service in `services/quant-py/`. Pure-function indicators and a deterministic scoring core, all unit-tested on synthetic data with no network. The market-data client is injected so the endpoint is testable with fixtures. This service is the foundation every later phase builds on.
 
-**Tech Stack:** Python 3.11, FastAPI, uvicorn, pandas, pandas-ta, numpy (<2 — pandas-ta requirement), httpx, pydantic v2, pytest.
+**Tech Stack:** Python 3.13, FastAPI, uvicorn, pandas, numpy, httpx, pydantic v2, pytest. Indicators are computed directly (a few lines each) — **no `pandas-ta`**, which is unmaintained and breaks on numpy 2 / Python 3.13.
 
 ---
 
@@ -20,7 +20,7 @@ services/quant-py/
   app/
     __init__.py
     models.py                     # pydantic response schemas
-    indicators.py                 # pure indicator functions (pandas-ta + manual VWAP)
+    indicators.py                 # pure indicator functions (ewm/Wilder + manual VWAP)
     regime.py                     # regime classifier
     data/
       __init__.py
@@ -62,9 +62,8 @@ requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.111",
   "uvicorn[standard]>=0.30",
-  "pandas>=2.0,<2.2",
-  "numpy>=1.23,<2.0",
-  "pandas-ta==0.3.14b0",
+  "pandas>=2.1",
+  "numpy>=1.26",
   "httpx>=0.27",
   "pydantic>=2.6",
 ]
@@ -84,7 +83,7 @@ Run (from `services/quant-py/`):
 python -m venv .venv
 .venv\Scripts\python -m pip install -e ".[dev]"
 ```
-Expected: install completes; `pandas_ta` imports without error (numpy pinned <2 avoids the `from numpy import NaN` break).
+Expected: install completes on Python 3.13 (numpy 2.x / pandas 3.x); `import fastapi, pandas, numpy` all succeed.
 
 - [ ] **Step 3: Write the failing test** — `tests/test_api.py`
 
@@ -185,21 +184,37 @@ Expected: FAIL — `ModuleNotFoundError: app.indicators`.
 - [ ] **Step 3: Create `app/indicators.py`**
 
 ```python
-"""Pure indicator functions. No I/O, no globals — fully unit-testable."""
+"""Pure indicator functions. No I/O, no globals — fully unit-testable.
+
+Computed directly with pandas/numpy (no pandas-ta dependency). EMA uses an
+exponential moving average; RSI and ATR use Wilder's smoothing (ewm alpha=1/length).
+"""
 import pandas as pd
-import pandas_ta as ta
 
 
 def ema(close: pd.Series, length: int) -> pd.Series:
-    return ta.ema(close, length=length)
+    return close.ewm(span=length, adjust=False).mean()
 
 
 def rsi(close: pd.Series, length: int = 14) -> pd.Series:
-    return ta.rsi(close, length=length)
+    delta = close.diff()
+    gain = delta.clip(lower=0.0)
+    loss = (-delta).clip(lower=0.0)
+    avg_gain = gain.ewm(alpha=1.0 / length, adjust=False, min_periods=length).mean()
+    avg_loss = loss.ewm(alpha=1.0 / length, adjust=False, min_periods=length).mean()
+    rs = avg_gain / avg_loss
+    out = 100.0 - (100.0 / (1.0 + rs))
+    return out.where(avg_loss != 0, 100.0)   # all-gains (no losses) => RSI 100
 
 
 def atr(high: pd.Series, low: pd.Series, close: pd.Series, length: int = 14) -> pd.Series:
-    return ta.atr(high=high, low=low, close=close, length=length)
+    prev_close = close.shift(1)
+    true_range = pd.concat([
+        high - low,
+        (high - prev_close).abs(),
+        (low - prev_close).abs(),
+    ], axis=1).max(axis=1)
+    return true_range.ewm(alpha=1.0 / length, adjust=False, min_periods=length).mean()
 
 
 def session_vwap(df: pd.DataFrame) -> pd.Series:
