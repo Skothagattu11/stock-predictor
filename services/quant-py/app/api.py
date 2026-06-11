@@ -22,6 +22,6 @@ def health():
 def predict_intraday(symbol: str, interval: str = "5m",
                      md: MarketData = Depends(get_market_data)):
     df = md.fetch_candles(symbol.upper(), interval=interval, range_="1d")
-    if df.empty or len(df) < 2:
+    if df.empty or len(df) < 20:
         raise HTTPException(status_code=422, detail="insufficient candles for intraday analysis")
     return score_intraday(symbol.upper(), df, interval_minutes=_INTERVAL_MINUTES.get(interval, 5))
