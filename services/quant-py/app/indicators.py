@@ -18,7 +18,9 @@ def rsi(close: pd.Series, length: int = 14) -> pd.Series:
     avg_loss = loss.ewm(alpha=1.0 / length, adjust=False, min_periods=length).mean()
     rs = avg_gain / avg_loss
     out = 100.0 - (100.0 / (1.0 + rs))
-    return out.where(avg_loss != 0, 100.0)   # all-gains (no losses) => RSI 100
+    # all-gains and no losses => RSI 100; no movement at all => RSI 50
+    out = out.where(avg_loss != 0, 100.0)
+    return out.where((avg_loss != 0) | (avg_gain != 0), 50.0)
 
 
 def atr(high: pd.Series, low: pd.Series, close: pd.Series, length: int = 14) -> pd.Series:
