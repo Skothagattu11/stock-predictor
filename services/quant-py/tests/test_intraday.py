@@ -18,6 +18,7 @@ def test_flat_series_is_neutral(flat_df):
     p = score_intraday("AAPL", flat_df, interval_minutes=5)
     assert p.bias == "Neutral"
     assert 0.4 <= p.probability_up <= 0.6
+    assert p.drivers == []
 
 def test_expected_move_widens_in_high_vol():
     import numpy as np, pandas as pd

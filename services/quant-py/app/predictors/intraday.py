@@ -12,10 +12,11 @@ from app.regime import classify_regime
 from app.models import IntradayPrediction, ExpectedMove, Driver
 
 OPENING_RANGE_MINUTES = 15
-MOMENTUM_WINDOW_MINUTES = 30
+OPENING_DRIVE_MINUTES = 30
 RELVOL_BREAKOUT_MIN = 1.3
 BULLISH_PROB = 0.58
 BEARISH_PROB = 0.42
+HIGH_VOL_MOVE_MULT = 1.5
 
 # signal weights (centered at 0; positive => bullish)
 W_VWAP, W_EMA, W_RSI, W_ORB, W_MOM = 1.4, 1.0, 0.6, 1.2, 0.8
@@ -44,8 +45,8 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5) -> 
     or_high = float(df["high"].iloc[:orb_n].max())
     or_low = float(df["low"].iloc[:orb_n].min())
 
-    mom_n = _bars(MOMENTUM_WINDOW_MINUTES, interval_minutes)
-    first_close = float(close.iloc[min(mom_n, len(close)) - 1])
+    drive_n = _bars(OPENING_DRIVE_MINUTES, interval_minutes)
+    first_close = float(close.iloc[min(drive_n, len(close)) - 1])
     open_px = float(df["open"].iloc[0])
     first_mom = (first_close - open_px) / open_px if open_px else 0.0
 
@@ -72,11 +73,11 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5) -> 
         score -= W_ORB; drivers.append(("ORB breakdown", "down", -W_ORB))
 
     if first_mom != 0.0:
-        mom_dir = W_MOM if first_mom > 0 else -W_MOM
-        # range regime dampens momentum-style signals
+        open_drive = W_MOM if first_mom > 0 else -W_MOM
+        # range regime dampens opening-drive signal
         if regime.label == "range":
-            mom_dir *= 0.4
-        score += mom_dir; drivers.append(("Opening momentum", "up" if mom_dir > 0 else "down", mom_dir))
+            open_drive *= 0.4
+        score += open_drive; drivers.append(("Opening drive", "up" if open_drive > 0 else "down", open_drive))
 
     probability_up = _logistic(score)
     if probability_up >= BULLISH_PROB:
@@ -86,7 +87,7 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5) -> 
     else:
         bias = "Neutral"
 
-    k = 1.5 if regime.label == "high_vol" else 1.0
+    k = HIGH_VOL_MOVE_MULT if regime.label == "high_vol" else 1.0
     move = k * atr_now
     expected_move = ExpectedMove(low=price - move, base=price, high=price + move)
 
@@ -101,10 +102,10 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5) -> 
         want = None
 
     # only surface drivers that agree with the final bias (no contradictions)
-    shown = [Driver(name=n, direction=d) for (n, d, c) in drivers
-             if want is None or d == want]
     if want is None:
-        shown = [Driver(name=n, direction=d) for (n, d, c) in drivers][:3]
+        shown = []
+    else:
+        shown = [Driver(name=n, direction=d) for (n, d, c) in drivers if d == want]
 
     last_ts = int(df["timestamp"].iloc[-1])
     as_of = datetime.fromtimestamp(last_ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

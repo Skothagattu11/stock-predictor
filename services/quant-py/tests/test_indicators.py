@@ -10,6 +10,9 @@ def test_rsi_of_strictly_increasing_series_approaches_100():
     s = pd.Series(np.arange(1, 31, dtype=float))
     assert ind.rsi(s, 14).iloc[-1] > 99.0
 
+def test_rsi_of_flat_series_is_fifty():
+    assert abs(ind.rsi(pd.Series([10.0] * 30), 14).iloc[-1] - 50.0) < 1e-6
+
 def test_atr_is_positive_and_finite():
     n = 30
     high = pd.Series(np.full(n, 11.0))

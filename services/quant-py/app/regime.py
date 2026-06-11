@@ -3,8 +3,9 @@ from dataclasses import dataclass
 import pandas as pd
 from app import indicators as ind
 
-HIGH_VOL_ATR_PCT = 0.03   # ATR > 3% of price => volatility regime
-TREND_EPS = 1e-3          # min normalized EMA spread to call a trend
+HIGH_VOL_ATR_PCT = 0.03         # ATR > 3% of price => volatility regime
+TREND_EPS = 1e-3               # min normalized EMA spread to call a trend
+TREND_FULL_CONF_SPREAD = 0.01  # 1% EMA spread => full trend confidence
 
 
 @dataclass
@@ -26,7 +27,7 @@ def classify_regime(df: pd.DataFrame) -> Regime:
     ema_fast = float(ind.ema(close, 9).iloc[-1])
     ema_slow = float(ind.ema(close, 20).iloc[-1])
     spread = (ema_fast - ema_slow) / price if price else 0.0
-    conf = min(1.0, abs(spread) / 0.01)   # 1% spread => full confidence
+    conf = min(1.0, abs(spread) / TREND_FULL_CONF_SPREAD)
 
     if spread > TREND_EPS:
         return Regime("trend_up", round(conf, 3))
