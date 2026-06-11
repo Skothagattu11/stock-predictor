@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prediction Engine — Architecture</title>
+<style>
+  :root{
+    --bg:#0b0f17; --panel:#121826; --panel2:#0f1420; --line:#243049;
+    --ink:#e7ecf5; --mut:#8a97b1; --mut2:#5f6c86;
+    --quant:#39d98a; --llm:#7aa2ff; --consensus:#c08bff; --ui:#ffb454;
+    --data:#3fd0d6; --future:#6b7794; --bad:#ff6b6b;
+    --chip:#1a2236;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 700px at 70% -10%,#16203400,#0b0f17),var(--bg);
+    color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+    padding:32px 28px 60px}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:.2px}
+  .sub{color:var(--mut);margin:0 0 8px;font-size:13px}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 26px}
+  .legend span{display:inline-flex;align-items:center;gap:7px;color:var(--mut);font-size:12px}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .wrap{max-width:1180px;margin:0 auto}
+  .flow{display:flex;flex-direction:column;align-items:stretch;gap:0}
+  .layer{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+    position:relative}
+  .layer + .arrow{height:30px}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--mut2)}
+  .arrow svg{width:22px;height:30px}
+  .ltitle{display:flex;align-items:center;gap:10px;margin:0 0 12px;font-weight:600;font-size:13px;
+    text-transform:uppercase;letter-spacing:.6px}
+  .ltitle .tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.4px}
+  .row{display:flex;flex-wrap:wrap;gap:12px}
+  .card{flex:1 1 0;min-width:150px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:11px;padding:12px 13px}
+  .card h4{margin:0 0 5px;font-size:13px}
+  .card p{margin:0;color:var(--mut);font-size:12px}
+  .pillrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
+  .pill{font-size:11px;padding:3px 9px;border-radius:999px;background:var(--chip);
+    border:1px solid var(--line);color:var(--mut)}
+  .lead{border-left:3px solid var(--quant)}
+  .accent-quant{border-color:#1f5a3f;background:linear-gradient(180deg,#10241b,#0f1420)}
+  .accent-llm{border-color:#2a3a6b;background:linear-gradient(180deg,#111a33,#0f1420)}
+  .accent-consensus{border-color:#4a2f6b;background:linear-gradient(180deg,#1c1430,#0f1420)}
+  .accent-ui{border-color:#6b4f1f;background:linear-gradient(180deg,#241d10,#0f1420)}
+  .accent-data{border-color:#1f5a5e;background:linear-gradient(180deg,#10242530,#0f1420)}
+  .badge{margin-left:auto;font-size:11px;color:var(--mut);font-weight:500;text-transform:none;
+    letter-spacing:0}
+  .provider{flex:1 1 0;min-width:120px;text-align:center;background:var(--chip);
+    border:1px solid var(--line);border-radius:10px;padding:11px 8px;font-size:12px}
+  .provider b{display:block;font-size:13px;margin-bottom:2px}
+  .provider small{color:var(--mut);font-size:11px}
+  .future{border-style:dashed;border-color:var(--future);opacity:.92}
+  .future .ftag{display:inline-block;margin-top:6px;font-size:10px;color:var(--future);
+    border:1px dashed var(--future);border-radius:999px;padding:1px 7px}
+  .fanwrap{margin-top:6px}
+  .fanline{height:18px;display:flex;align-items:flex-end;justify-content:center;color:var(--mut2)}
+  .note{display:flex;gap:8px;align-items:flex-start;margin-top:11px;color:var(--mut);font-size:12px}
+  .note svg{flex:0 0 auto;margin-top:2px}
+  .side{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
+  .side .card{flex:1 1 220px}
+  .kbd{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;background:#0a0e16;border:1px solid var(--line);
+    border-radius:5px;padding:1px 6px;color:#cdd6ea}
+  .deg{margin-top:11px;border:1px dashed #5a2a2a;background:#1a1012;border-radius:10px;padding:9px 12px;
+    color:#ffb3b3;font-size:12px;display:flex;gap:8px;align-items:center}
+  .split{display:flex;gap:14px;flex-wrap:wrap}
+  .split > div{flex:1 1 320px}
+  .secthead{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;
+    letter-spacing:.6px;color:var(--mut2);margin:0 0 8px}
+  footer{max-width:1180px;margin:34px auto 0;color:var(--mut2);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Multi-Horizon · Multi-Model Prediction Engine</h1>
+  <p class="sub">Numbers in code · words from the models · same agent across every provider · consensus on top. (Design — 2026-06-11)</p>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--data)"></i>Data</span>
+    <span><i class="dot" style="background:var(--quant)"></i>Quant (deterministic code)</span>
+    <span><i class="dot" style="background:var(--llm)"></i>LLM layer</span>
+    <span><i class="dot" style="background:var(--consensus)"></i>Consensus</span>
+    <span><i class="dot" style="background:var(--ui)"></i>UI</span>
+    <span><i class="dot" style="background:var(--future);border:1px dashed var(--future)"></i>Future / pluggable</span>
+  </div>
+
+  <div class="flow">
+
+    <!-- DATA -->
+    <div class="layer">
+      <div class="ltitle"><i class="dot" style="background:var(--data)"></i>1 · Data sources <span class="badge">cheap · cached · keyless where possible</span></div>
+      <div class="row">
+        <div class="card accent-data"><h4>Yahoo Finance candles</h4><p>1m / 5m / 1D OHLCV + volume. Live near-real-time price poll.</p></div>
+        <div class="card accent-data"><h4>Web-grounded fundamentals & news</h4><p>Pulled on demand via grounded LLM (Perplexity / Gemini) — cited, dated.</p></div>
+        <div class="card accent-data"><h4>User position & portfolio</h4><p>Cost basis, size, saved holdings (localStorage → server context).</p></div>
+      </div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 22 30"><path d="M11 0v22m0 0l-6-6m6 6l6-6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></div>
+
+    <!-- QUANT -->
+    <div class="layer">
+      <div class="ltitle"><i class="dot" style="background:var(--quant)"></i>2 · Quant engine — pure code, computes every number
+        <span class="tag" style="background:#13351f;color:var(--quant)">NO LLM · auditable · unit-tested</span></div>
+      <div class="row">
+        <div class="card accent-quant"><h4>A · Intraday <small style="color:var(--mut)">(Today)</small></h4>
+          <p>Regime classifier → volume-filtered ORB · first-30-min momentum · VWAP · ATR stops.</p>
+          <div class="pillrow"><span class="pill">bias</span><span class="pill">prob</span><span class="pill">move range</span></div></div>
+        <div class="card accent-quant"><h4>B · Outlook <small style="color:var(--mut)">(Weeks–months)</small></h4>
+          <p>200d regime gate · 12-1 momentum · earnings-revision · PEAD · quality · valuation.</p>
+          <div class="pillrow"><span class="pill">bull/base/bear</span></div></div>
+        <div class="card accent-quant"><h4>C · Position <small style="color:var(--mut)">(Personal)</small></h4>
+          <p>P/L · weight · distance to stop/target → HOLD / TRIM / ADD / EXIT.</p></div>
+        <div class="card accent-quant"><h4>D · Portfolio <small style="color:var(--mut)">(Personal)</small></h4>
+          <p>Correlation · concentration · diversification gaps across holdings.</p></div>
+      </div>
+      <div class="note"><svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" stroke="var(--mut2)" fill="none"/><path d="M8 4v5M8 11h.01" stroke="var(--mut2)" stroke-width="1.5"/></svg>
+        Emits a compact <b style="color:var(--ink)">structured feature snapshot</b> + a rounded <b style="color:var(--ink)">snapshot hash</b> (drives caching & "skip the LLM" — and is the input vector for a future trained model).</div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 22 30"><path d="M11 0v22m0 0l-6-6m6 6l6-6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></div>
+
+    <!-- LLM ROUTER + FANOUT -->
+    <div class="layer">
+      <div class="ltitle"><i class="dot" style="background:var(--llm)"></i>3 · LLM router — fan the <em style="color:var(--ink);font-style:normal">same</em> prompt to every available model
+        <span class="badge">Vercel AI SDK · schema-forced (Zod) · provider list is config</span></div>
+      <div class="row">
+        <div class="provider"><b style="color:var(--llm)">OpenAI</b><small>reasoning / synthesis</small></div>
+        <div class="provider"><b style="color:var(--llm)">Claude</b><small>reasoning / schema</small></div>
+        <div class="provider"><b style="color:var(--llm)">Gemini</b><small>cheap · grounded</small></div>
+        <div class="provider"><b style="color:var(--llm)">Perplexity</b><small>web-grounded · cited</small></div>
+        <div class="provider future"><b style="color:var(--future)">OpenRouter</b><small>300+ models</small><span class="ftag">future · drop-in adapter</span></div>
+        <div class="provider future"><b style="color:var(--future)">Your own model</b><small>XGBoost / fine-tune</small><span class="ftag">future · same interface</span></div>
+      </div>
+      <div class="note"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 1l2 4 4 .5-3 3 .8 4L8 14l-3.8 1.5.8-4-3-3 4-.5z" stroke="var(--mut2)" fill="none"/></svg>
+        Each adapter returns the <b style="color:var(--ink)">same JSON shape</b> <span class="kbd">{stance, confidence, rationale, sources}</span>. Retry → fallback → circuit-breaker live here. Per-day token budget cap.</div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 22 30"><path d="M11 0v22m0 0l-6-6m6 6l6-6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></div>
+
+    <!-- CONSENSUS -->
+    <div class="layer">
+      <div class="ltitle"><i class="dot" style="background:var(--consensus)"></i>4 · Consensus aggregator + validation
+        <span class="tag" style="background:#2a1c40;color:var(--consensus)">~150 LOC in-house</span></div>
+      <div class="row">
+        <div class="card accent-consensus"><h4>Agreement scoring</h4><p>Majority stance + agreement %. Models split → flagged as <b style="color:var(--ink)">low conviction</b> (divergence is a signal).</p></div>
+        <div class="card accent-consensus"><h4>Number reconciliation</h4><p>Any figure a model echoes is checked against the quant value — mismatch is stripped / re-asked. No hallucinated numbers reach the UI.</p></div>
+        <div class="card accent-consensus"><h4>Headline + per-model rows</h4><p>Consensus = headline; each provider's individual call stays expandable for side-by-side comparison.</p></div>
+      </div>
+      <div class="deg"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 1l7 13H1z" stroke="currentColor" fill="none"/><path d="M8 6v4M8 12h.01" stroke="currentColor" stroke-width="1.4"/></svg>
+        Graceful degradation: no key / budget hit / all providers down → <b>pure-quant templated output</b>. The widget never errors.</div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 22 30"><path d="M11 0v22m0 0l-6-6m6 6l6-6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></div>
+
+    <!-- CACHE / SCHEDULER -->
+    <div class="layer">
+      <div class="ltitle">5 · Cache & scheduler <span class="badge">single Render instance · in-memory</span></div>
+      <div class="row">
+        <div class="card"><h4>LRU cache · TTL by horizon</h4><p>intraday 1–5m · outlook 12–24h · position 1–6h · portfolio 6–24h. Single-flight dedupe + stale-while-revalidate for instant feel.</p></div>
+        <div class="card"><h4>Background trend tracker</h4><p><b style="color:var(--quant)">Quant-only, zero LLM</b>: snapshots watchlist + saved positions while idle, so trend history accumulates even when nobody's looking.</p></div>
+        <div class="card"><h4>Calibration log</h4><p>Predictions + realized outcomes + Brier score → keeps confidence honest <em>and</em> becomes the training set for your own model.</p></div>
+      </div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 22 30"><path d="M11 0v22m0 0l-6-6m6 6l6-6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></div>
+
+    <!-- UI -->
+    <div class="layer">
+      <div class="ltitle"><i class="dot" style="background:var(--ui)"></i>6 · UI — horizon × scope, honesty built in</div>
+      <div class="secthead">Market view</div>
+      <div class="row" style="margin-bottom:12px">
+        <div class="card accent-ui"><h4>A · Intraday card</h4><p>SignalChip + prob + expected-move range + invalidation.</p></div>
+        <div class="card accent-ui"><h4>B · Outlook card</h4><p>Bull / base / bear fan — uncertainty widens with horizon.</p></div>
+      </div>
+      <div class="secthead">Your view</div>
+      <div class="row" style="margin-bottom:12px">
+        <div class="card accent-ui"><h4>C · Position action</h4><p>HOLD / TRIM / ADD / EXIT, P/L-aware reasoning.</p></div>
+        <div class="card accent-ui"><h4>D · Portfolio fit</h4><p>Overlap / concentration / diversification.</p></div>
+      </div>
+      <div class="row">
+        <div class="card accent-ui"><h4>Model-consensus panel</h4><p>Every provider's call side-by-side + consensus headline — the multi-model feature made visible.</p></div>
+      </div>
+      <div class="note"><svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" stroke="var(--mut2)" fill="none"/></svg>
+        Every card carries the same honesty primitives: <span class="pill">HorizonBadge</span> <span class="pill">ConfidenceMeter (banded)</span> <span class="pill">FreshnessTag</span> <span class="pill">AIBadge · sources</span> — color never alone (WCAG).</div>
+    </div>
+
+  </div>
+
+  <!-- side principles -->
+  <div style="margin-top:26px" class="split">
+    <div>
+      <div class="secthead">Why this shape</div>
+      <div class="side">
+        <div class="card"><h4 style="color:var(--quant)">Numbers in code</h4><p>The LLM never does arithmetic — no hallucinated prices, fully cacheable, always degradable to pure-quant.</p></div>
+        <div class="card"><h4 style="color:var(--consensus)">Models compared, not chosen</h4><p>Same agent across every provider; consensus on top; disagreement surfaced as honest uncertainty.</p></div>
+      </div>
+    </div>
+    <div>
+      <div class="secthead">Built to extend</div>
+      <div class="side">
+        <div class="card future"><h4 style="color:var(--future)">OpenRouter</h4><p>One more adapter + flag → 300+ models in the same ensemble. Off by default today.</p></div>
+        <div class="card future"><h4 style="color:var(--future)">Train your own model</h4><p>Calibration log = labeled data; feature snapshot = input vector; serve it as one more adapter and benchmark it against the frontier models in the consensus panel.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Spec: <span class="kbd">docs/2026-06-11-multi-horizon-prediction-engine-design.md</span> · Router: Vercel AI SDK + in-house consensus · Heavy ML model deferred to a later phase.</footer>
+</div>
+</body>
+</html>

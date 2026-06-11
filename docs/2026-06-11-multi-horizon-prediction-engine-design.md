@@ -109,6 +109,26 @@ library; our aggregator must plug into the quant snapshot + reconciliation anywa
 [ConsensusLLM](https://github.com/usefulmove/ConsensusLLM) (consistency threshold ≈ our split flag),
 [AISCouncil](https://www.aiscouncil.net/) (Compare / Consensus-Vote / Mixture-of-Agents modes).
 
+## Extensibility (designed-in, built later)
+
+The router treats **every model as an interchangeable adapter behind one interface**, which makes two
+future extensions drop-in rather than rewrites:
+
+- **OpenRouter as a provider.** Add one `openrouter` adapter (it speaks the OpenAI-compatible protocol the
+  AI SDK already uses) and a config flag. That instantly unlocks 300+ models in the *same* ensemble +
+  consensus panel — no pipeline changes. Kept as an optional, off-by-default provider from day one.
+- **Your own trained model as just another "model".** A custom model — whether the deferred XGBoost
+  intraday scorer or a fine-tuned LLM — is served behind a small inference endpoint and registered as one
+  more adapter. It then appears **side-by-side with the frontier models in the consensus panel**, so you
+  can benchmark your model head-to-head and let consensus weight it. Two enablers are built in for this:
+  1. **Calibration logging** (predictions + realized outcomes + Brier score) is precisely the **labeled
+     training dataset** for your own model — the system accumulates training data as it runs.
+  2. The **quant cores already emit structured features**; that feature snapshot is the model's input
+     vector, so training/serving reuses the existing context builder.
+
+Design rule: nothing downstream of the router (consensus, validation, cache, UI) may assume a fixed set of
+providers — provider list is config-driven.
+
 ## Backend architecture (single Render instance, in-memory)
 
 ```
