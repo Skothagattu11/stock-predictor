@@ -1,5 +1,5 @@
-# Render Blueprint — deploy as a Node web service.
-# In Render: New + > Blueprint, point at this repo, it reads this file.
+# Render Blueprint — deploys the Node web app + the Python quant sidecar.
+# In Render: New + > Blueprint, point at this repo/branch; it reads this file.
 services:
   - type: web
     name: stock-predictor
@@ -15,3 +15,22 @@ services:
       # (Environment tab) — do NOT commit a real key.
       - key: FINNHUB_API_KEY
         sync: false
+      # Auto-wired to the sidecar below. Used by the Node app from Phase 4
+      # onward (sidecar calls); harmless/ignored until then.
+      - key: QUANT_SIDECAR_URL
+        fromService:
+          type: web
+          name: quant-py
+          property: host
+
+  # Python quant/ML sidecar (FastAPI). Built from its own Dockerfile.
+  # plan: starter (paid) avoids sleep/cold-starts and gives more RAM than free —
+  # bump to standard later when qlib/ML (Phase 9) needs more memory.
+  - type: web
+    name: quant-py
+    runtime: docker
+    plan: starter
+    rootDir: services/quant-py
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
