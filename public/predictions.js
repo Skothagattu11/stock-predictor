@@ -71,6 +71,7 @@
 
   // ---- card renderers ------------------------------------------------------
   function insightCard(node, data, horizon) {
+    if (horizon === 'Today') lastTodayInsight = data;
     var c = data.consensus || { stance: 'neutral', agreement: 0, divergence: true, votes: [] };
     var m = STANCE_META[c.stance] || STANCE_META.neutral;
     var conf = c.agreement || 0;
@@ -102,7 +103,23 @@
       '<div class="plvl"><span>Sell / target</span><b class="d-up">' + money(L.target) + movePct + '</b></div>' +
       '<div class="plvl"><span>Stop</span><b class="d-dn">' + money(L.stop) + '</b></div>' +
       '<div class="plvl"><span>Reward:Risk</span><b>' + L.risk_reward.toFixed(2) + '×</b></div>' +
-      '</div>';
+      '</div>' + rrFeasibility(L);
+  }
+  // Is the user's desired R:R achievable within today's realistic move?
+  function rrFeasibility(L) {
+    var want = getMinRR();
+    var risk = Math.abs(L.entry - L.stop);
+    if (!risk || !want) return '';
+    if (want <= L.risk_reward) {
+      var tgt = L.direction === 'long' ? L.entry + want * risk : L.entry - want * risk;
+      var mp = (want * risk) / L.entry;
+      return '<div class="prrfeas ok">✓ Your ' + want + '× is reachable — take profit at ' + money(tgt) +
+        ' (' + pct(L.direction === 'long' ? mp : -mp) + '), within today’s expected move.</div>';
+    }
+    var needPct = (want * risk) / L.entry, havePct = L.move_pct || 0;
+    return '<div class="prrfeas no">✗ Your ' + want + '× needs ' + pct(L.direction === 'long' ? needPct : -needPct) +
+      ' — beyond today’s realistic ' + pct(L.direction === 'long' ? havePct : -havePct) +
+      ' move (model max ≈ ' + L.risk_reward.toFixed(1) + '×).</div>';
   }
   function collectSources(models) {
     var s = []; (models || []).forEach(function (m) { (m.sources || []).forEach(function (x) { if (s.indexOf(x) < 0) s.push(x); }); });
@@ -157,6 +174,11 @@
   var LS_MINRR = 'csd_min_rr_v1';
   var LS_JOURNAL = 'csd_setup_journal_v1';
   var lastTimeline = null;
+  var lastTodayInsight = null;
+  var lastSymbol = null;
+  var LS_WIN_TF = 'csd_win_tf_v1';
+  function getWinTF() { return localStorage.getItem(LS_WIN_TF) === '5m' ? '5m' : '1m'; }
+  function setWinTF(v) { try { localStorage.setItem(LS_WIN_TF, v); } catch (e) {} }
   function nowMs() { return new Date().getTime(); }
   function getMinRR() { var v = parseFloat(localStorage.getItem(LS_MINRR)); return (isFinite(v) && v > 0) ? v : 1.5; }
   function setMinRR(v) { try { localStorage.setItem(LS_MINRR, String(v)); } catch (e) {} }
@@ -265,7 +287,12 @@
     var head = '<div class="pcard-head"><span class="phbadge">Intraday windows</span>' + freshnessTag(data.as_of) + '</div>';
     var strip = phaseStrip(data.phase);
     var watch = data.watch ? '<div class="pwwatch">' + esc(data.watch) + '</div>' : '';
-    var settings = '<div class="pwset">Min reward:risk <input type="number" id="pwMinRR" min="0.5" step="0.1" value="' + minRR + '" />' +
+    var tf = getWinTF();
+    var tfToggle = '<span class="pwtf">' + ['1m', '5m'].map(function (x) {
+      return '<button class="pwtf-b' + (x === tf ? ' on' : '') + '" data-tf="' + x + '">' + x + '</button>';
+    }).join('') + '</span>';
+    var settings = '<div class="pwset">' + tfToggle + '<span>Min reward:risk</span>' +
+      '<input type="number" id="pwMinRR" min="0.5" step="0.1" value="' + minRR + '" />' +
       '<span class="pmuted">' + meet + ' of ' + setups.length + ' meet it</span></div>';
     var levels = keyLevels(data.levels);
     var rows = setups.length
@@ -273,11 +300,11 @@
       : '<div class="pmuted">No setups triggered yet this session.</div>';
     node.innerHTML = head + strip + watch + settings + levels + rows + '<div class="pcard-foot">' + aiBadge([]) + '</div>';
   }
-  function loadWindows(symbol) {
+  function loadWindows(symbol, interval) {
     var node = el('predWindows');
     if (!node) { renderTrack(); return; }
     loadingCard(node, 'Intraday windows');
-    getJSON('/api/predict/setups/' + encodeURIComponent(symbol))
+    getJSON('/api/predict/setups/' + encodeURIComponent(symbol) + '?interval=' + encodeURIComponent(interval || getWinTF()))
       .then(function (d) { windowsCard(node, d); logSetups(symbol, d.setups); renderTrack(); })
       .catch(function (e) { errorCard(node, 'Intraday windows', e); renderTrack(); });
   }
@@ -290,7 +317,8 @@
     if (!cards.intraday) return;   // section not present
 
     loadingCard(cards.intraday, 'Today'); loadingCard(cards.outlook, 'Weeks–Months');
-    loadWindows(symbol);
+    lastSymbol = symbol;
+    loadWindows(symbol, getWinTF());
 
     getJSON('/api/insight/intraday/' + encodeURIComponent(symbol))
       .then(function (d) { insightCard(cards.intraday, d, 'Today'); })
@@ -333,12 +361,17 @@
     if (e.target && e.target.id === 'pwMinRR') {
       setMinRR(e.target.value);
       if (lastTimeline) windowsCard(el('predWindows'), lastTimeline);
+      if (lastTodayInsight && el('predIntraday')) insightCard(el('predIntraday'), lastTodayInsight, 'Today');
     }
   });
   document.addEventListener('click', function (e) {
-    if (e.target && e.target.id === 'ptClear') {
+    if (!e.target) return;
+    if (e.target.id === 'ptClear') {
       try { localStorage.removeItem(LS_JOURNAL); } catch (err) {}
       renderTrack();
+    } else if (e.target.getAttribute && e.target.getAttribute('data-tf')) {
+      setWinTF(e.target.getAttribute('data-tf'));
+      if (lastSymbol) loadWindows(lastSymbol, getWinTF());
     }
   });
 

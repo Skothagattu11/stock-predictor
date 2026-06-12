@@ -1,5 +1,6 @@
 """Intraday setup scanner: detects day-trade windows over a 1-minute session and
 tags each with its time-of-day phase. Deterministic; no LLM, no I/O."""
+import math
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import pandas as pd
@@ -8,11 +9,11 @@ from app import indicators as ind
 from app.models import Setup, SetupTimeline, KeyLevel
 
 ET = ZoneInfo("America/New_York")
-OPENING_RANGE_BARS = 15
+OPENING_RANGE_MINUTES = 15       # opening range = first 15 min (bar count derived per interval)
 RELVOL_MIN = 1.3
 TARGET_INTRADAY_FRACTION = 0.3   # intraday target ~= 0.3x the daily move (reachable in-session)
 MIN_STOP_FRACTION = 0.1          # floor the risk so a tight signal candle doesn't give an absurd R:R
-COOLDOWN_BARS = 15               # don't re-fire the same setup type/direction within ~15 bars
+COOLDOWN_MINUTES = 15            # don't re-fire the same setup type/direction within ~15 min
 MIN_RR = 1.0                     # skip windows whose measured reward:risk is below this
 MAX_SETUPS = 8
 
@@ -118,11 +119,13 @@ def _resolve(direction: str, entry: float, target: float, stop: float,
 
 def scan_setups(symbol: str, df: pd.DataFrame, daily_atr: float | None = None,
                 prior_day_high: float | None = None, prior_day_low: float | None = None,
-                max_setups: int = MAX_SETUPS) -> SetupTimeline:
+                interval_minutes: int = 1, max_setups: int = MAX_SETUPS) -> SetupTimeline:
     d = df.reset_index(drop=True)
     close, open_, high, low = d["close"], d["open"], d["high"], d["low"]
     vol, ts = d["volume"], d["timestamp"]
     n = len(close)
+    or_bars = max(1, math.ceil(OPENING_RANGE_MINUTES / interval_minutes))   # opening range in bars
+    cooldown = max(1, math.ceil(COOLDOWN_MINUTES / interval_minutes))       # re-fire gap in bars
 
     vwap = ind.session_vwap(d)
     ema9, ema20 = ind.ema(close, 9), ind.ema(close, 20)
@@ -134,13 +137,13 @@ def scan_setups(symbol: str, df: pd.DataFrame, daily_atr: float | None = None,
     tgt_dist = TARGET_INTRADAY_FRACTION * atr_day
     min_risk = MIN_STOP_FRACTION * atr_day
 
-    or_high = float(high.iloc[:OPENING_RANGE_BARS].max())
-    or_low = float(low.iloc[:OPENING_RANGE_BARS].min())
+    or_high = float(high.iloc[:or_bars].max())
+    or_low = float(low.iloc[:or_bars].min())
 
     setups: list[Setup] = []
     last_emit: dict = {}
     orb_long = orb_short = False
-    start = max(OPENING_RANGE_BARS, 20)
+    start = max(or_bars, 20)
     for i in range(start, n):
         if pd.isna(vwap.iloc[i]) or pd.isna(ema9.iloc[i]) or pd.isna(ema20.iloc[i]):
             continue
@@ -171,7 +174,7 @@ def scan_setups(symbol: str, df: pd.DataFrame, daily_atr: float | None = None,
 
         typ, direction, trigger = evt
         key = (typ, direction)
-        if i - last_emit.get(key, -10 ** 9) < COOLDOWN_BARS:
+        if i - last_emit.get(key, -10 ** 9) < cooldown:
             continue                                    # collapse a grind into one window
         entry = float(c)
         a_in = atr_intra.iloc[i]

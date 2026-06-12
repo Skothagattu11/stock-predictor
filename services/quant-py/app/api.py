@@ -160,13 +160,15 @@ def _prior_day_hilo(md: MarketData, symbol: str):
     return None, None
 
 @app.get("/predict/setups/{symbol}", response_model=SetupTimeline)
-def predict_setups(symbol: str, md: MarketData = Depends(get_market_data)):
+def predict_setups(symbol: str, interval: str = "1m", md: MarketData = Depends(get_market_data)):
     sym = symbol.upper()
-    df = md.fetch_candles(sym, interval="1m", range_="1d")
+    interval = interval if interval in ("1m", "5m") else "1m"
+    df = md.fetch_candles(sym, interval=interval, range_="1d")
     if df.empty or len(df) < 20:
         raise HTTPException(status_code=422, detail="insufficient candles for setup scan")
     pdh, pdl = _prior_day_hilo(md, sym)
-    return scan_setups(sym, df, daily_atr=_daily_atr(md, sym), prior_day_high=pdh, prior_day_low=pdl)
+    return scan_setups(sym, df, daily_atr=_daily_atr(md, sym), prior_day_high=pdh, prior_day_low=pdl,
+                       interval_minutes=_INTERVAL_MINUTES.get(interval, 1))
 
 
 class PortfolioRequest(_BaseModel):

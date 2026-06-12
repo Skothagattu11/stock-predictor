@@ -20,7 +20,7 @@ function createPredictService({ sidecar, cache }) {
     impliedMove: (s) => cached('impliedMove', s, () => sidecar.impliedMove(s)),
     position: (symbol, params) => sidecar.position({ symbol, ...params }),  // uncached
     portfolio: (holdings) => sidecar.portfolio(holdings),                   // uncached
-    setups: (s) => cached('setups', s, () => sidecar.setups(s)),
+    setups: (s, interval) => cached('setups', `${s}:${interval || '1m'}`, () => sidecar.setups(s, interval)),
   };
 }
 
