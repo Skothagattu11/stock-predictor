@@ -382,6 +382,7 @@
       subscribe();
       if (state.simulate) send({ type: 'simulate', on: true });
       fetchNews(state.symbol);
+      refreshPredictions();
     };
 
     ws.onmessage = function (evt) {
@@ -563,10 +564,38 @@
     subscribe();
     if (state.simulate) send({ type: 'simulate', on: true });
     fetchNews(symbol);
+    refreshPredictions();
     renderPositionCard();
     renderPortfolio();
     searchInput.value = '';
     hideResults();
+  }
+
+  // ---------- Predictions refresh (Phase 7) ----------
+  function refreshPredictions() {
+    if (!window.Predictions) return;
+    var pos = (typeof getPosition === 'function') ? getPosition(state.symbol) : null;
+    var ctx = {};
+    // getPosition returns { symbol, shares, cost } where cost = avg price/share
+    if (pos && pos.cost > 0) {
+      ctx.position = {
+        cost_basis: pos.cost,
+        current_price: state.livePrice || priceMap[state.symbol] || pos.cost,
+        shares: pos.shares > 0 ? pos.shares : undefined,
+        portfolio_value: undefined,
+      };
+    }
+    // Build holdings list from the full portfolio for the portfolio card
+    var portfolio = loadPortfolio();
+    if (portfolio.length) {
+      ctx.holdings = portfolio.map(function (p) {
+        var price = p.symbol === state.symbol
+          ? (state.livePrice || priceMap[p.symbol] || p.cost)
+          : (priceMap[p.symbol] || p.cost);
+        return { symbol: p.symbol, value: p.shares > 0 && price ? p.shares * price : 0 };
+      }).filter(function (h) { return h.value > 0; });
+    }
+    try { window.Predictions.load(state.symbol, ctx); } catch (e) { /* non-fatal */ }
   }
 
   // ---------- Market news ----------
