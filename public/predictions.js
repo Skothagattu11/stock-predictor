@@ -153,6 +153,71 @@
       '<div class="pmuted">Analyzing…</div>';
   }
 
+  // ---- R:R setting + setup track-record (localStorage) ---------------------
+  var LS_MINRR = 'csd_min_rr_v1';
+  var LS_JOURNAL = 'csd_setup_journal_v1';
+  var lastTimeline = null;
+  function nowMs() { return new Date().getTime(); }
+  function getMinRR() { var v = parseFloat(localStorage.getItem(LS_MINRR)); return (isFinite(v) && v > 0) ? v : 1.5; }
+  function setMinRR(v) { try { localStorage.setItem(LS_MINRR, String(v)); } catch (e) {} }
+  function loadJournal() { try { return JSON.parse(localStorage.getItem(LS_JOURNAL)) || []; } catch (e) { return []; } }
+  function saveJournal(j) { try { localStorage.setItem(LS_JOURNAL, JSON.stringify(j.slice(-500))); } catch (e) {} }
+
+  // Record each setup the dashboard surfaces; update its outcome on later refreshes.
+  function logSetups(symbol, setups) {
+    if (!setups || !setups.length) return;
+    var j = loadJournal(), byId = {};
+    j.forEach(function (e) { byId[e.id] = e; });
+    setups.forEach(function (s) {
+      var id = symbol + '|' + s.time + '|' + s.type + '|' + s.direction;
+      if (byId[id]) { byId[id].status = s.status; byId[id].lastSeen = nowMs(); }
+      else {
+        var e = { id: id, symbol: symbol, time: s.time, type: s.type, direction: s.direction,
+          entry: s.entry, target: s.target, stop: s.stop, rr: s.risk_reward, status: s.status,
+          firstSeen: nowMs(), lastSeen: nowMs() };
+        j.push(e); byId[id] = e;
+      }
+    });
+    saveJournal(j);
+  }
+
+  function trackStats() {
+    var j = loadJournal(), DAY = 16 * 3600 * 1000, groups = {};
+    var overall = { type: 'All', n: 0, win: 0, loss: 0, pending: 0, rrSum: 0 };
+    j.forEach(function (e) {
+      var st = e.status;
+      if (st === 'active' && nowMs() - e.firstSeen > DAY) st = 'expired';   // unresolved by EOD
+      var g = groups[e.type] || (groups[e.type] = { type: e.type, n: 0, win: 0, loss: 0, pending: 0, rrSum: 0 });
+      g.n++; overall.n++; g.rrSum += e.rr || 0; overall.rrSum += e.rr || 0;
+      if (st === 'triggered_win') { g.win++; overall.win++; }
+      else if (st === 'triggered_loss') { g.loss++; overall.loss++; }
+      else { g.pending++; overall.pending++; }
+    });
+    return { groups: Object.keys(groups).map(function (k) { return groups[k]; }), overall: overall };
+  }
+
+  function renderTrack() {
+    var node = el('predTrack'); if (!node) return;
+    var st = trackStats(), o = st.overall;
+    var head = '<div class="pcard-head"><span class="phbadge">Setup track record</span>' +
+      (o.n ? '<button class="pt-clear" id="ptClear">Clear</button>' : '') + '</div>';
+    if (!o.n) {
+      node.innerHTML = head + '<div class="pmuted">No setups logged yet. As windows appear they\'re recorded here and marked hit / stopped, so you can see whether the predicted R:R is actually met.</div>';
+      return;
+    }
+    function rate(w, l) { var r = w + l; return r ? Math.round(w / r * 100) + '%' : '—'; }
+    function rowH(g, cls) {
+      return '<div class="ptrow ' + (cls || '') + '"><span>' + esc(g.type) + '</span><span>' + g.n +
+        '</span><span class="d-up">' + g.win + '</span><span class="d-dn">' + g.loss + '</span><span>' + g.pending +
+        '</span><span><b>' + rate(g.win, g.loss) + '</b></span><span>' + (g.n ? (g.rrSum / g.n).toFixed(1) : '—') + '×</span></div>';
+    }
+    var rows = st.groups.sort(function (a, b) { return b.n - a.n; }).map(function (g) { return rowH(g); }).join('');
+    node.innerHTML = head +
+      '<div class="pmuted" style="margin-bottom:8px">Was the predicted reward:risk met? (target hit ✓ vs stopped ✗)</div>' +
+      '<div class="ptrow ptrow-h"><span>Setup</span><span>#</span><span>✓</span><span>✗</span><span>pend</span><span>R:R met</span><span>avg R:R</span></div>' +
+      rows + rowH(o, 'ptotal');
+  }
+
   // ---- Intraday Windows panel ----------------------------------------------
   var PHASE_LABEL = { pre: 'Pre-market', open_drive: 'Open drive', morning: 'Morning trend',
     midday: 'Midday (avoid)', afternoon: 'Afternoon', power_hour: 'Power hour', closed: 'Closed' };
@@ -164,17 +229,19 @@
       return '<span class="pwp' + cls + '">' + PHASE_LABEL[p] + '</span>';
     }).join('<span class="pwp-sep">›</span>') + '</div>';
   }
-  function setupRow(s) {
+  function setupRow(s, minRR) {
     var dirCls = s.direction === 'long' ? 'd-up' : 'd-dn';
     var statusMap = { triggered_win: '✓ hit target', triggered_loss: '✗ stopped', active: '● live' };
     var t = new Date(s.time);
     var hhmm = isNaN(t) ? '' : t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     var qcls = s.quality === 'high' ? 'pq-high' : s.quality === 'low' ? 'pq-low' : 'pq-med';
-    return '<div class="pwrow ' + (s.status === 'active' ? 'pwrow-active' : '') + '">' +
+    var meets = s.risk_reward >= minRR;       // does it clear YOUR min R:R?
+    return '<div class="pwrow ' + (s.status === 'active' ? 'pwrow-active ' : '') + (meets ? '' : 'pwrow-dim') +
+      '" title="' + (meets ? 'meets your ' + minRR + '× min' : 'below your ' + minRR + '× min') + '">' +
       '<span class="pw-t">' + hhmm + '</span>' +
       '<span class="pw-type">' + esc(s.type) + ' <i class="' + dirCls + '">' + (s.direction === 'long' ? 'LONG' : 'SHORT') + '</i></span>' +
       '<span class="pw-lv">' + money(s.entry) + ' → <b class="d-up">' + money(s.target) + '</b> / <b class="d-dn">' + money(s.stop) + '</b></span>' +
-      '<span class="pw-rr">' + s.risk_reward.toFixed(1) + '×</span>' +
+      '<span class="pw-rr ' + (meets ? 'd-up' : 'd-dn') + '">' + s.risk_reward.toFixed(1) + '×</span>' +
       '<span class="pw-st ' + qcls + '">' + (statusMap[s.status] || s.status) + '</span></div>';
   }
   function keyLevels(levels) {
@@ -191,22 +258,28 @@
       '<div class="pkl-row"><span>Buy / support</span>' + chips(sup, 'pkl-sup') + '</div></div>';
   }
   function windowsCard(node, data) {
+    lastTimeline = data;
+    var minRR = getMinRR();
+    var setups = data.setups || [];
+    var meet = setups.filter(function (s) { return s.risk_reward >= minRR; }).length;
     var head = '<div class="pcard-head"><span class="phbadge">Intraday windows</span>' + freshnessTag(data.as_of) + '</div>';
     var strip = phaseStrip(data.phase);
     var watch = data.watch ? '<div class="pwwatch">' + esc(data.watch) + '</div>' : '';
+    var settings = '<div class="pwset">Min reward:risk <input type="number" id="pwMinRR" min="0.5" step="0.1" value="' + minRR + '" />' +
+      '<span class="pmuted">' + meet + ' of ' + setups.length + ' meet it</span></div>';
     var levels = keyLevels(data.levels);
-    var rows = (data.setups && data.setups.length)
-      ? '<div class="pwrows">' + data.setups.slice().reverse().map(setupRow).join('') + '</div>'
+    var rows = setups.length
+      ? '<div class="pwrows">' + setups.slice().reverse().map(function (s) { return setupRow(s, minRR); }).join('') + '</div>'
       : '<div class="pmuted">No setups triggered yet this session.</div>';
-    node.innerHTML = head + strip + watch + levels + rows + '<div class="pcard-foot">' + aiBadge([]) + '</div>';
+    node.innerHTML = head + strip + watch + settings + levels + rows + '<div class="pcard-foot">' + aiBadge([]) + '</div>';
   }
   function loadWindows(symbol) {
     var node = el('predWindows');
-    if (!node) return;
+    if (!node) { renderTrack(); return; }
     loadingCard(node, 'Intraday windows');
     getJSON('/api/predict/setups/' + encodeURIComponent(symbol))
-      .then(function (d) { windowsCard(node, d); })
-      .catch(function (e) { errorCard(node, 'Intraday windows', e); });
+      .then(function (d) { windowsCard(node, d); logSetups(symbol, d.setups); renderTrack(); })
+      .catch(function (e) { errorCard(node, 'Intraday windows', e); renderTrack(); });
   }
 
   // ---- orchestration -------------------------------------------------------
@@ -254,6 +327,20 @@
         '<div class="pmuted">Add holdings to see portfolio fit.</div>';
     }
   }
+
+  // Live edits: change min R:R re-renders the windows from the cached timeline; Clear wipes the journal.
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'pwMinRR') {
+      setMinRR(e.target.value);
+      if (lastTimeline) windowsCard(el('predWindows'), lastTimeline);
+    }
+  });
+  document.addEventListener('click', function (e) {
+    if (e.target && e.target.id === 'ptClear') {
+      try { localStorage.removeItem(LS_JOURNAL); } catch (err) {}
+      renderTrack();
+    }
+  });
 
   window.Predictions = { load: load };
 })();
