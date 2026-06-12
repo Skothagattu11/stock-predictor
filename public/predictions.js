@@ -98,7 +98,8 @@
     }
     var verb = L.direction === 'long' ? 'Buy near' : 'Short near';
     var movePct = (L.move_pct != null ? ' <small class="pmv">(' + pct(L.direction === 'long' ? L.move_pct : -L.move_pct) + ')</small>' : '');
-    return '<div class="plevels">' +
+    return '<div class="plvl-hd">Day-trade plan · <b>today’s session</b> (intraday)</div>' +
+      '<div class="plevels">' +
       '<div class="plvl"><span>' + verb + '</span><b>' + money(L.entry) + '</b></div>' +
       '<div class="plvl"><span>Sell / target</span><b class="d-up">' + money(L.target) + movePct + '</b></div>' +
       '<div class="plvl"><span>Stop</span><b class="d-dn">' + money(L.stop) + '</b></div>' +
@@ -176,6 +177,7 @@
   var lastTimeline = null;
   var lastTodayInsight = null;
   var lastSymbol = null;
+  var selectedPhase = null;
   var LS_WIN_TF = 'csd_win_tf_v1';
   function getWinTF() { return localStorage.getItem(LS_WIN_TF) === '5m' ? '5m' : '1m'; }
   function setWinTF(v) { try { localStorage.setItem(LS_WIN_TF, v); } catch (e) {} }
@@ -245,11 +247,14 @@
     midday: 'Midday (avoid)', afternoon: 'Afternoon', power_hour: 'Power hour', closed: 'Closed' };
   var PHASES = ['open_drive', 'morning', 'midday', 'afternoon', 'power_hour'];
 
-  function phaseStrip(current) {
-    return '<div class="pwphase">' + PHASES.map(function (p) {
+  function phaseStrip(current, selected) {
+    var btns = PHASES.map(function (p) {
       var cls = p === current ? ' pwp-now' : ''; cls += (p === 'midday' ? ' pwp-bad' : '');
-      return '<span class="pwp' + cls + '">' + PHASE_LABEL[p] + '</span>';
-    }).join('<span class="pwp-sep">›</span>') + '</div>';
+      cls += (p === selected ? ' pwp-sel' : '');
+      return '<button class="pwp' + cls + '" data-phase="' + p + '">' + PHASE_LABEL[p] + '</button>';
+    }).join('<span class="pwp-sep">›</span>');
+    var all = '<button class="pwp pwp-all' + (selected ? '' : ' pwp-sel') + '" data-phase="all">All</button>';
+    return '<div class="pwphase">' + all + '<span class="pwp-sep">›</span>' + btns + '</div>';
   }
   function setupRow(s, minRR) {
     var dirCls = s.direction === 'long' ? 'd-up' : 'd-dn';
@@ -282,10 +287,11 @@
   function windowsCard(node, data) {
     lastTimeline = data;
     var minRR = getMinRR();
-    var setups = data.setups || [];
+    var all = data.setups || [];
+    var setups = selectedPhase ? all.filter(function (s) { return s.phase === selectedPhase; }) : all;
     var meet = setups.filter(function (s) { return s.risk_reward >= minRR; }).length;
     var head = '<div class="pcard-head"><span class="phbadge">Intraday windows</span>' + freshnessTag(data.as_of) + '</div>';
-    var strip = phaseStrip(data.phase);
+    var strip = phaseStrip(data.phase, selectedPhase);
     var watch = data.watch ? '<div class="pwwatch">' + esc(data.watch) + '</div>' : '';
     var tf = getWinTF();
     var tfToggle = '<span class="pwtf">' + ['1m', '5m'].map(function (x) {
@@ -293,11 +299,12 @@
     }).join('') + '</span>';
     var settings = '<div class="pwset">' + tfToggle + '<span>Min reward:risk</span>' +
       '<input type="number" id="pwMinRR" min="0.5" step="0.1" value="' + minRR + '" />' +
-      '<span class="pmuted">' + meet + ' of ' + setups.length + ' meet it</span></div>';
+      '<span class="pmuted">' + meet + ' of ' + setups.length + ' meet it' +
+      (selectedPhase ? ' · ' + PHASE_LABEL[selectedPhase] : '') + '</span></div>';
     var levels = keyLevels(data.levels);
     var rows = setups.length
       ? '<div class="pwrows">' + setups.slice().reverse().map(function (s) { return setupRow(s, minRR); }).join('') + '</div>'
-      : '<div class="pmuted">No setups triggered yet this session.</div>';
+      : '<div class="pmuted">' + (selectedPhase ? 'No setups fired during ' + PHASE_LABEL[selectedPhase] + '.' : 'No setups triggered yet this session.') + '</div>';
     node.innerHTML = head + strip + watch + settings + levels + rows + '<div class="pcard-foot">' + aiBadge([]) + '</div>';
   }
   function loadWindows(symbol, interval) {
@@ -372,6 +379,10 @@
     } else if (e.target.getAttribute && e.target.getAttribute('data-tf')) {
       setWinTF(e.target.getAttribute('data-tf'));
       if (lastSymbol) loadWindows(lastSymbol, getWinTF());
+    } else if (e.target.getAttribute && e.target.getAttribute('data-phase')) {
+      var p = e.target.getAttribute('data-phase');
+      selectedPhase = (p === 'all' || p === selectedPhase) ? null : p;
+      if (lastTimeline) windowsCard(el('predWindows'), lastTimeline);
     }
   });
 

@@ -303,8 +303,12 @@
     .pflags { margin:0; padding-left:18px; font-size:12px; color:#ffb454; }
     .pmuted { color: var(--muted,#95a3b8); font-size:13px; }
     .pwphase { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:4px 0 10px; font-size:11px; }
-    .pwp { padding:2px 8px; border-radius:999px; border:1px solid var(--line,#243149); color:var(--muted,#95a3b8); }
+    .pwp { padding:3px 9px; border-radius:999px; border:1px solid var(--line,#243149); color:var(--muted,#95a3b8);
+      background:transparent; cursor:pointer; }
+    .pwp:hover { border-color:var(--blue,#5aa7ff); color:var(--text,#e8eef8); }
+    .pwp-sel { background:var(--blue,#5aa7ff); color:#04101f; font-weight:700; border-color:var(--blue,#5aa7ff); }
     .pwp-now { color:var(--text,#e8eef8); border-color:var(--blue,#3a7bd5); background:#16203a; }
+    .plvl-hd { font-size:11px; color:var(--muted,#95a3b8); margin-bottom:6px; text-transform:uppercase; letter-spacing:.4px; }
     .pwp-bad { color:#ff6b6b; } .pwp-sep { color:var(--muted,#5f6c86); }
     .pwwatch { font-size:12px; color:var(--muted,#95a3b8); margin-bottom:8px; }
     .pwrows { display:flex; flex-direction:column; gap:4px; }
