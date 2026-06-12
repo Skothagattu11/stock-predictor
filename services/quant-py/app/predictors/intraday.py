@@ -9,7 +9,7 @@ import pandas as pd
 
 from app import indicators as ind
 from app.regime import classify_regime
-from app.models import IntradayPrediction, ExpectedMove, Driver
+from app.models import IntradayPrediction, ExpectedMove, Driver, TradeLevels
 
 OPENING_RANGE_MINUTES = 15
 OPENING_DRIVE_MINUTES = 30
@@ -17,6 +17,7 @@ RELVOL_BREAKOUT_MIN = 1.3
 BULLISH_PROB = 0.58
 BEARISH_PROB = 0.42
 HIGH_VOL_MOVE_MULT = 1.5
+TARGET_R = 1.8           # reward:risk multiple for the profit target
 
 # signal weights (centered at 0; positive => bullish)
 W_VWAP, W_EMA, W_RSI, W_ORB, W_MOM = 1.4, 1.0, 0.6, 1.2, 0.8
@@ -107,6 +108,21 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5) -> 
     else:
         shown = [Driver(name=n, direction=d) for (n, d, c) in drivers if d == want]
 
+    # Actionable trade levels: entry at current price, stop at the invalidation,
+    # target at TARGET_R x risk in the bias direction (favorable reward:risk).
+    levels = None
+    risk = abs(price - invalidation)
+    if want is not None and risk > 0:
+        if bias == "Bullish":
+            target = price + TARGET_R * risk
+            direction = "long"
+        else:
+            target = price - TARGET_R * risk
+            direction = "short"
+        levels = TradeLevels(direction=direction, entry=round(price, 4),
+                             target=round(target, 4), stop=round(invalidation, 4),
+                             risk_reward=TARGET_R)
+
     last_ts = int(df["timestamp"].iloc[-1])
     as_of = datetime.fromtimestamp(last_ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -114,4 +130,4 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5) -> 
         symbol=symbol, bias=bias, probability_up=round(probability_up, 4),
         expected_move=expected_move, regime=regime.label,
         regime_confidence=regime.confidence, invalidation=round(invalidation, 4),
-        drivers=shown, as_of=as_of)
+        drivers=shown, levels=levels, as_of=as_of)

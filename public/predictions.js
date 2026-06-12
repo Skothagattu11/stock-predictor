@@ -79,9 +79,23 @@
       '<div class="pcard-sig">' + signalChip(m.label, m.icon, m.cls, conf < 0.33) + confidenceMeter(conf) + '</div>' +
       driverPills(data.quant && data.quant.drivers) +
       (horizon.indexOf('Week') > -1 ? scenarioFan(data.quant) : '') +
+      (horizon === 'Today' ? tradeLevels(data.quant) : '') +
       consensusRows(c) +
       '<div class="pcard-foot">' + aiBadge(collectSources(data.models)) + '</div>';
     node.innerHTML = html;
+  }
+  function tradeLevels(quant) {
+    var L = quant && quant.levels;
+    if (!L) {
+      return '<div class="pmuted plvl-wait">No clean intraday setup yet — wait for a better entry.</div>';
+    }
+    var verb = L.direction === 'long' ? 'Buy near' : 'Short near';
+    return '<div class="plevels">' +
+      '<div class="plvl"><span>' + verb + '</span><b>' + money(L.entry) + '</b></div>' +
+      '<div class="plvl"><span>Sell / target</span><b class="d-up">' + money(L.target) + '</b></div>' +
+      '<div class="plvl"><span>Stop</span><b class="d-dn">' + money(L.stop) + '</b></div>' +
+      '<div class="plvl"><span>Reward:Risk</span><b>' + L.risk_reward.toFixed(1) + '×</b></div>' +
+      '</div>';
   }
   function collectSources(models) {
     var s = []; (models || []).forEach(function (m) { (m.sources || []).forEach(function (x) { if (s.indexOf(x) < 0) s.push(x); }); });

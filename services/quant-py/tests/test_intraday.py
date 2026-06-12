@@ -20,6 +20,20 @@ def test_flat_series_is_neutral(flat_df):
     assert 0.4 <= p.probability_up <= 0.6
     assert p.drivers == []
 
+def test_bullish_levels_long_target_above_entry_above_stop(bullish_df):
+    p = score_intraday("AAPL", bullish_df, interval_minutes=5)
+    assert p.levels is not None and p.levels.direction == "long"
+    assert p.levels.target > p.levels.entry > p.levels.stop
+    assert abs(p.levels.risk_reward - 1.8) < 1e-9
+
+def test_bearish_levels_short_target_below_entry_below_stop(bearish_df):
+    p = score_intraday("AAPL", bearish_df, interval_minutes=5)
+    assert p.levels is not None and p.levels.direction == "short"
+    assert p.levels.target < p.levels.entry < p.levels.stop
+
+def test_neutral_has_no_levels(flat_df):
+    assert score_intraday("AAPL", flat_df, interval_minutes=5).levels is None
+
 def test_expected_move_widens_in_high_vol():
     import numpy as np, pandas as pd
     from tests.conftest import BASE_TS

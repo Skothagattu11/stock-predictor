@@ -15,6 +15,14 @@ class ExpectedMove(BaseModel):
     unit: Literal["price"] = "price"
 
 
+class TradeLevels(BaseModel):
+    direction: Literal["long", "short"]
+    entry: float                     # suggested buy (long) / short price
+    target: float                    # take-profit price
+    stop: float                      # invalidation / stop-loss price
+    risk_reward: float               # reward:risk multiple of the target
+
+
 class IntradayPrediction(BaseModel):
     symbol: str
     bias: Literal["Bullish", "Neutral", "Bearish"]
@@ -24,6 +32,7 @@ class IntradayPrediction(BaseModel):
     regime_confidence: float = Field(ge=0.0, le=1.0)
     invalidation: float
     drivers: list[Driver]
+    levels: TradeLevels | None = None   # actionable entry/target/stop (None when no clean setup)
     as_of: str                       # ISO ts taken from the data, never wall-clock
     source: Literal["quant"] = "quant"
     horizon: Literal["intraday"] = "intraday"
