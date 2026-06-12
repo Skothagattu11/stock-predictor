@@ -96,15 +96,23 @@
     if (!L) {
       return '<div class="pmuted plvl-wait">No directional edge right now (neutral) — wait for a clearer signal.</div>';
     }
-    var verb = L.direction === 'long' ? 'Buy near' : 'Short near';
-    var movePct = (L.move_pct != null ? ' <small class="pmv">(' + pct(L.direction === 'long' ? L.move_pct : -L.move_pct) + ')</small>' : '');
+    var isLong = L.direction === 'long';
+    var verb = isLong ? 'Buy near' : 'Short near';
+    var winPct = Math.abs(L.target - L.entry) / L.entry;
+    var lossPct = Math.abs(L.entry - L.stop) / L.entry;
+    var dirNote = isLong
+      ? 'Model leans <b class="d-up">UP</b> — long setup (profit if it rises).'
+      : 'Model leans <b class="d-dn">DOWN</b> — this is a <b>SHORT</b> (profit if it falls). If you only buy, treat it as <b>avoid / wait</b>.';
     return '<div class="plvl-hd">Day-trade plan · <b>today’s session</b> (intraday)</div>' +
+      '<div class="plvl-dir">' + dirNote + '</div>' +
       '<div class="plevels">' +
       '<div class="plvl"><span>' + verb + '</span><b>' + money(L.entry) + '</b></div>' +
-      '<div class="plvl"><span>Sell / target</span><b class="d-up">' + money(L.target) + movePct + '</b></div>' +
-      '<div class="plvl"><span>Stop</span><b class="d-dn">' + money(L.stop) + '</b></div>' +
+      '<div class="plvl"><span>Target (profit)</span><b class="d-up">' + money(L.target) + ' <small class="pmv">(+' + (winPct * 100).toFixed(1) + '%)</small></b></div>' +
+      '<div class="plvl"><span>Stop (loss)</span><b class="d-dn">' + money(L.stop) + ' <small class="pmv">(−' + (lossPct * 100).toFixed(1) + '%)</small></b></div>' +
       '<div class="plvl"><span>Reward:Risk</span><b>' + L.risk_reward.toFixed(2) + '×</b></div>' +
-      '</div>' + rrFeasibility(L);
+      '</div>' +
+      '<div class="plvl-out">If it works: <b class="d-up">+' + (winPct * 100).toFixed(1) + '%</b> to target · If it fails: <b class="d-dn">−' + (lossPct * 100).toFixed(1) + '%</b> to stop</div>' +
+      rrFeasibility(L);
   }
   // Is the user's desired R:R achievable within today's realistic move?
   function rrFeasibility(L) {
