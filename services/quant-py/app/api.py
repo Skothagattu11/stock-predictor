@@ -19,12 +19,14 @@ def health():
 
 
 @app.get("/predict/intraday/{symbol}", response_model=IntradayPrediction)
-def predict_intraday(symbol: str, interval: str = "5m",
+def predict_intraday(symbol: str, interval: str = "1m",
                      md: MarketData = Depends(get_market_data)):
+    # 1-minute bars so the read is live early in the session (usable ~15 min after
+    # the open) and as_of tracks the current minute.
     df = md.fetch_candles(symbol.upper(), interval=interval, range_="1d")
-    if df.empty or len(df) < 20:
+    if df.empty or len(df) < 15:
         raise HTTPException(status_code=422, detail="insufficient candles for intraday analysis")
-    return score_intraday(symbol.upper(), df, interval_minutes=_INTERVAL_MINUTES.get(interval, 5))
+    return score_intraday(symbol.upper(), df, interval_minutes=_INTERVAL_MINUTES.get(interval, 1))
 
 
 from app import config

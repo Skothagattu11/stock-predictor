@@ -120,8 +120,10 @@
       '<div class="pcard-foot">' + aiBadge([]) + '</div>';
   }
   function errorCard(node, horizon, e) {
-    var msg = e && e.status === 503 ? 'Live model unavailable (keys/sidecar not configured).' :
-      'Could not load (' + (e && e.message || 'error') + ').';
+    var msg;
+    if (e && e.status === 422) msg = 'Forming — not enough session data yet. Updates automatically as the session builds.';
+    else if (e && e.status === 503) msg = 'Live model unavailable (sidecar/keys not reachable).';
+    else msg = 'Could not load (' + (e && e.message || 'error') + ').';
     node.innerHTML = '<div class="pcard-head"><span class="phbadge">' + esc(horizon) + '</span></div>' +
       '<div class="pmuted">' + esc(msg) + '</div>';
   }

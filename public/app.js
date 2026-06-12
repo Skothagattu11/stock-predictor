@@ -1112,4 +1112,13 @@
   refreshPortfolioPrices();
   setInterval(refreshPortfolioPrices, 30000);
   connect();
+
+  // Keep the prediction cards live without manual reload: poll every 60s while the
+  // tab is visible, and refresh immediately when the user returns to the tab.
+  setInterval(function () {
+    if (document.visibilityState !== 'hidden') refreshPredictions();
+  }, 60000);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') refreshPredictions();
+  });
 })();
