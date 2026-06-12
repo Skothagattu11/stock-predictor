@@ -10,8 +10,10 @@ from app.models import Setup, SetupTimeline, KeyLevel
 ET = ZoneInfo("America/New_York")
 OPENING_RANGE_BARS = 15
 RELVOL_MIN = 1.3
-STOP_ATR_FRACTION = 0.25
-TARGET_ATR_FRACTION = 0.5
+TARGET_INTRADAY_FRACTION = 0.3   # intraday target ~= 0.3x the daily move (reachable in-session)
+MIN_STOP_FRACTION = 0.1          # floor the risk so a tight signal candle doesn't give an absurd R:R
+COOLDOWN_BARS = 15               # don't re-fire the same setup type/direction within ~15 bars
+MIN_RR = 1.0                     # skip windows whose measured reward:risk is below this
 MAX_SETUPS = 8
 
 _WATCH = {
@@ -128,13 +130,15 @@ def scan_setups(symbol: str, df: pd.DataFrame, daily_atr: float | None = None,
     atr_day = daily_atr if (daily_atr and daily_atr > 0) else float(ind.atr(high, low, close, 14).iloc[-1])
     if not atr_day or atr_day != atr_day:      # NaN/0 guard
         atr_day = float(close.iloc[-1]) * 0.01
-    stop_dist = STOP_ATR_FRACTION * atr_day
-    tgt_dist = TARGET_ATR_FRACTION * atr_day
+    atr_intra = ind.atr(high, low, close, 14)
+    tgt_dist = TARGET_INTRADAY_FRACTION * atr_day
+    min_risk = MIN_STOP_FRACTION * atr_day
 
     or_high = float(high.iloc[:OPENING_RANGE_BARS].max())
     or_low = float(low.iloc[:OPENING_RANGE_BARS].min())
 
     setups: list[Setup] = []
+    last_emit: dict = {}
     orb_long = orb_short = False
     start = max(OPENING_RANGE_BARS, 20)
     for i in range(start, n):
@@ -166,20 +170,30 @@ def scan_setups(symbol: str, df: pd.DataFrame, daily_atr: float | None = None,
             continue
 
         typ, direction, trigger = evt
+        key = (typ, direction)
+        if i - last_emit.get(key, -10 ** 9) < COOLDOWN_BARS:
+            continue                                    # collapse a grind into one window
         entry = float(c)
+        a_in = atr_intra.iloc[i]
+        if pd.isna(a_in) or a_in <= 0:
+            a_in = atr_day * 0.1
+        buf = 0.05 * a_in
+        # stop below/above the signal candle (structural) -> risk varies per setup
         if direction == "long":
-            stop, target = entry - stop_dist, entry + tgt_dist
+            risk = max(entry - (min(lo, low.iloc[i - 1]) - buf), min_risk)
+            stop, target = entry - risk, entry + tgt_dist
         else:
-            stop, target = entry + stop_dist, entry - tgt_dist
-        risk = abs(entry - stop)
-        if risk <= 0:
+            risk = max((max(hi, high.iloc[i - 1]) + buf) - entry, min_risk)
+            stop, target = entry + risk, entry - tgt_dist
+        rr = round(tgt_dist / risk, 2)
+        if risk <= 0 or rr < MIN_RR:                    # poor reward:risk -> not a window
             continue
+        last_emit[key] = i
         phase, quality = session_phase(int(ts.iloc[i]))
         setups.append(Setup(
             time=_iso(int(ts.iloc[i])), type=typ, direction=direction,
             entry=round(entry, 4), target=round(target, 4), stop=round(stop, 4),
-            risk_reward=round(abs(target - entry) / risk, 2),
-            trigger=trigger, phase=phase, quality=quality,
+            risk_reward=rr, trigger=trigger, phase=phase, quality=quality,
             status=_resolve(direction, entry, target, stop, high, low, i, n)))
 
     levels = _key_levels(d, float(close.iloc[-1]), prior_day_high, prior_day_low)
