@@ -883,11 +883,13 @@
     upsertPosition(state.symbol, S || 0, P || 0);
     fillPositionForm();                          // show the normalized/derived values
     renderPositionCard(); renderPortfolio(); refreshPortfolioPrices();
+    refreshPredictions();                        // update the "Your view" prediction cards
   });
   $('posRemove').addEventListener('click', function () {
     removePosition(state.symbol);
     fillPositionForm();                          // clears the inputs
     renderPositionCard(); renderPortfolio();
+    refreshPredictions();                        // reflect the cleared position
   });
   $('portfolioRows').addEventListener('click', function (e) {
     var rm = e.target.getAttribute && e.target.getAttribute('data-rm');
