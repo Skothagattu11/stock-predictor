@@ -332,6 +332,19 @@
       border-radius:8px; padding:3px 10px; font-size:11px; cursor:pointer; }
     @media (max-width:760px){ .ptrow { grid-template-columns:1.4fr 28px 28px 28px 50px; } .ptrow > span:nth-child(7),.ptrow > span:nth-child(6){ display:none; } }
     @media (max-width:760px){ .pwrow { grid-template-columns:44px 1fr 1fr; } .pw-rr,.pw-st { display:none; } }
+
+    /* ---------- Discover panel ---------- */
+    .dvhead { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+    .dvgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+    @media (max-width:900px){ .dvgrid { grid-template-columns:1fr; } }
+    .dvlane-h { font-size:13px; font-weight:700; margin-bottom:8px; }
+    .dvrow { display:grid; grid-template-columns:60px 1fr auto; grid-template-areas:'sym name px' 'sym why why';
+      gap:2px 8px; width:100%; text-align:left; background:var(--panel2,#111b2d); border:1px solid var(--line,#243149);
+      border-radius:10px; padding:8px 10px; margin-bottom:6px; cursor:pointer; color:var(--text,#e8eef8); }
+    .dvrow:hover { border-color:var(--blue,#5aa7ff); }
+    .dv-sym { grid-area:sym; font-weight:700; align-self:center; }
+    .dv-name { grid-area:name; color:var(--muted,#95a3b8); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dv-px { grid-area:px; font-size:12px; } .dv-why { grid-area:why; color:var(--muted,#95a3b8); font-size:11px; }
   </style>
 </head>
 <body>
@@ -438,6 +451,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Discover panel: Hot / Penny / Scope-to-shine market scanner -->
+    <div class="card" id="discoverCard" style="margin-top:18px"><div class="cardBody" id="discoverBody"></div></div>
 
     <!-- Predictions section: horizon ribbon + Market/Your view cards -->
     <section class="predictions" id="predictions">
@@ -614,5 +630,6 @@
 
   <script src="app.js"></script>
   <script src="predictions.js"></script>
+  <script src="discover.js"></script>
 </body>
 </html>

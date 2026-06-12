@@ -570,6 +570,7 @@
     searchInput.value = '';
     hideResults();
   }
+  window.selectSymbol = selectSymbol;   // let the Discover panel route clicks here
 
   // ---------- Predictions refresh (Phase 7) ----------
   function refreshPredictions() {
