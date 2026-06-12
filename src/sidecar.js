@@ -2,7 +2,9 @@
 
 function createSidecar({ baseUrl = (process.env.QUANT_SIDECAR_URL || ''), fetchImpl, timeoutMs = 8000 } = {}) {
   const doFetch = fetchImpl || fetch;            // Node 22 global fetch
-  const base = baseUrl.replace(/\/$/, '');
+  // Render's blueprint fromService injects a scheme-less host; default to https.
+  const withScheme = baseUrl && !/^https?:\/\//i.test(baseUrl) ? 'https://' + baseUrl : baseUrl;
+  const base = withScheme.replace(/\/$/, '');
 
   async function request(method, path, body) {
     if (!base) throw new Error('QUANT_SIDECAR_URL not configured');

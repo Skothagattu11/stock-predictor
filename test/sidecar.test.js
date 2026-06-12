@@ -40,3 +40,10 @@ test('non-ok response throws', async () => {
   const s = createSidecar({ baseUrl: 'http://side', fetchImpl: fakeFetch({}, {}, 503, false) });
   await assert.rejects(() => s.intraday('AAPL'), /503/);
 });
+
+test('scheme-less baseUrl (Render fromService host) defaults to https', async () => {
+  const rec = {};
+  const s = createSidecar({ baseUrl: 'quant-py.onrender.com', fetchImpl: fakeFetch(rec, {}) });
+  await s.intraday('AAPL');
+  assert.equal(rec.url, 'https://quant-py.onrender.com/predict/intraday/AAPL');
+});
