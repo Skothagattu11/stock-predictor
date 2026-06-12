@@ -10,8 +10,14 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.83",
+    "@ai-sdk/google": "^3.0.81",
+    "@ai-sdk/openai": "^3.0.70",
+    "@ai-sdk/perplexity": "^3.0.34",
+    "ai": "^6.0.202",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "zod": "^4.4.3"
   }
 }
