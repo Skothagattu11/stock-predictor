@@ -146,6 +146,29 @@ def predict_position(symbol: str, cost_basis: float, current_price: float | None
                            intraday_bias=intraday_bias, outlook_stance=outlook_stance)
 
 
+from app.predictors.setups import scan_setups
+from app.models import SetupTimeline
+
+
+def _prior_day_hilo(md: MarketData, symbol: str):
+    try:
+        ddf = md.fetch_candles(symbol, interval="1d", range_="1mo")
+        if not ddf.empty and len(ddf) >= 2:        # [-1] is today's forming bar, [-2] = prior day
+            return float(ddf["high"].iloc[-2]), float(ddf["low"].iloc[-2])
+    except Exception:
+        pass
+    return None, None
+
+@app.get("/predict/setups/{symbol}", response_model=SetupTimeline)
+def predict_setups(symbol: str, md: MarketData = Depends(get_market_data)):
+    sym = symbol.upper()
+    df = md.fetch_candles(sym, interval="1m", range_="1d")
+    if df.empty or len(df) < 20:
+        raise HTTPException(status_code=422, detail="insufficient candles for setup scan")
+    pdh, pdl = _prior_day_hilo(md, sym)
+    return scan_setups(sym, df, daily_atr=_daily_atr(md, sym), prior_day_high=pdh, prior_day_low=pdl)
+
+
 class PortfolioRequest(_BaseModel):
     holdings: list[Holding]
 

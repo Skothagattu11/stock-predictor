@@ -43,6 +43,7 @@ function createSidecar({ baseUrl = (process.env.QUANT_SIDECAR_URL || ''), fetchI
     macro: () => request('GET', '/context/macro'),
     fundamentals: (s) => request('GET', `/context/fundamentals/${encodeURIComponent(s)}`),
     impliedMove: (s) => request('GET', `/context/implied-move/${encodeURIComponent(s)}`),
+    setups: (s) => request('GET', `/predict/setups/${encodeURIComponent(s)}`),
   };
 }
 

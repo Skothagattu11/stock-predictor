@@ -29,6 +29,7 @@ function createPredictRouter({ service }) {
   }));
 
   router.post('/portfolio', wrap((req) => service.portfolio(req.body.holdings || [])));
+  router.get('/setups/:symbol', wrap((req) => service.setups(req.params.symbol.toUpperCase())));
 
   return router;
 }
