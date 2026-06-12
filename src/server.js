@@ -105,6 +105,16 @@ const predictCache = new TtlCache();
 const predictService = createPredictService({ sidecar, cache: predictCache });
 app.use('/api/predict', createPredictRouter({ service: predictService }));
 
+const { buildAdapters } = require('./llm/adapters');
+const { createRouter: createLlmRouter } = require('./llm/router');
+const { createInsightService } = require('./insight-service');
+const { createInsightRouter } = require('./insight-routes');
+
+const llmRouter = createLlmRouter({ adapters: buildAdapters(config) });
+const insightService = createInsightService({ predictService, router: llmRouter });
+app.use('/api/insight', createInsightRouter({ insightService }));
+console.log(`[llm] ensemble providers configured: ${llmRouter.size}`);
+
 const WATCHLIST = (process.env.WATCHLIST || 'AAPL,MSFT,NVDA,SPY').split(',').map((s) => s.trim()).filter(Boolean);
 if (config.QUANT_SIDECAR_URL) {
   createScheduler({ service: predictService, symbols: WATCHLIST,

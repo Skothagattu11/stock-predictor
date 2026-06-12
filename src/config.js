@@ -8,6 +8,9 @@ const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const QUANT_SIDECAR_URL = (process.env.QUANT_SIDECAR_URL || '').trim();
+const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').trim();
+const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
+const PERPLEXITY_API_KEY = (process.env.PERPLEXITY_API_KEY || '').trim();
 
 module.exports = {
   FINNHUB_API_KEY,
@@ -15,6 +18,9 @@ module.exports = {
   GEMINI_MODEL,
   PORT,
   QUANT_SIDECAR_URL,
+  OPENAI_API_KEY,
+  ANTHROPIC_API_KEY,
+  PERPLEXITY_API_KEY,
   hasKey: Boolean(FINNHUB_API_KEY),
   hasGemini: Boolean(GEMINI_API_KEY),
 };
