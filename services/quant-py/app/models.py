@@ -2,6 +2,25 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class DiscoverItem(BaseModel):
+    symbol: str
+    name: str | None = None
+    price: float | None = None
+    change_pct: float | None = None
+    volume: float | None = None
+    score: float
+    reason: str
+
+
+class DiscoverResult(BaseModel):
+    hot: list[DiscoverItem] = []
+    penny: list[DiscoverItem] = []
+    shine: list[DiscoverItem] = []
+    sources: list[str] = []
+    as_of: str
+    source: Literal["quant"] = "quant"
+
+
 class Setup(BaseModel):
     time: str
     type: str
