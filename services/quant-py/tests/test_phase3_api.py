@@ -32,6 +32,16 @@ def test_position_endpoint():
     assert body["action"] in ("HOLD","TRIM","ADD","EXIT")
     assert round(body["unrealized_pnl_pct"],2) == 0.30
 
+def test_position_endpoint_fetches_live_price_when_omitted():
+    # no current_price -> sidecar fetches the live price (last close) for P/L
+    app.dependency_overrides[get_market_data] = lambda: _FakeMD(_daily(np.full(20, 120.0)))
+    try:
+        r = client.get("/predict/position/AAPL", params={"cost_basis":100,"shares":10})
+        assert r.status_code == 200
+        assert round(r.json()["unrealized_pnl_pct"], 2) == 0.20   # (120-100)/100
+    finally:
+        app.dependency_overrides.clear()
+
 def test_portfolio_endpoint():
     r = client.post("/predict/portfolio", json={"holdings":[
         {"symbol":"AAPL","value":9000},{"symbol":"MSFT","value":1000}]})

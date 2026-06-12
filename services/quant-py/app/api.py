@@ -121,11 +121,27 @@ def predict_outlook(symbol: str, benchmark: str = "SPY",
     return score_outlook(symbol, df, benchmark_df=bench_df)
 
 
+def _live_price(md: MarketData, symbol: str) -> float | None:
+    try:
+        df = md.fetch_candles(symbol, interval="1m", range_="1d")
+        if not df.empty:
+            return float(df["close"].iloc[-1])
+    except Exception:
+        pass
+    return None
+
+
 @app.get("/predict/position/{symbol}", response_model=PositionPrediction)
-def predict_position(symbol: str, current_price: float, cost_basis: float,
+def predict_position(symbol: str, cost_basis: float, current_price: float | None = None,
                      shares: float | None = None, portfolio_value: float | None = None,
-                     intraday_bias: str | None = None, outlook_stance: str | None = None):
-    return assess_position(symbol.upper(), current_price=current_price, cost_basis=cost_basis,
+                     intraday_bias: str | None = None, outlook_stance: str | None = None,
+                     md: MarketData = Depends(get_market_data)):
+    sym = symbol.upper()
+    # Source the live price server-side so P/L doesn't depend on the browser's chart feed.
+    price = current_price if current_price is not None else _live_price(md, sym)
+    if price is None:
+        price = cost_basis
+    return assess_position(sym, current_price=price, cost_basis=cost_basis,
                            shares=shares, portfolio_value=portfolio_value,
                            intraday_bias=intraday_bias, outlook_stance=outlook_stance)
 

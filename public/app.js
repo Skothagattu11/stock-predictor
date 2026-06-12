@@ -577,23 +577,24 @@
     var pos = (typeof getPosition === 'function') ? getPosition(state.symbol) : null;
     var ctx = {};
     // getPosition returns { symbol, shares, cost } where cost = avg price/share
+    // Build holdings list from the full portfolio for the portfolio card
+    var portfolio = loadPortfolio();
+    var holdings = [];
+    if (portfolio.length) {
+      holdings = portfolio.map(function (p) {
+        var price = priceMap[p.symbol] || p.cost;
+        return { symbol: p.symbol, value: p.shares > 0 && price ? p.shares * price : 0 };
+      }).filter(function (h) { return h.value > 0; });
+      ctx.holdings = holdings;
+    }
+    var portfolioValue = holdings.reduce(function (s, h) { return s + h.value; }, 0) || undefined;
+    // cost_basis + shares only — the sidecar fetches the live price for P/L.
     if (pos && pos.cost > 0) {
       ctx.position = {
         cost_basis: pos.cost,
-        current_price: state.livePrice || priceMap[state.symbol] || pos.cost,
         shares: pos.shares > 0 ? pos.shares : undefined,
-        portfolio_value: undefined,
+        portfolio_value: portfolioValue,
       };
-    }
-    // Build holdings list from the full portfolio for the portfolio card
-    var portfolio = loadPortfolio();
-    if (portfolio.length) {
-      ctx.holdings = portfolio.map(function (p) {
-        var price = p.symbol === state.symbol
-          ? (state.livePrice || priceMap[p.symbol] || p.cost)
-          : (priceMap[p.symbol] || p.cost);
-        return { symbol: p.symbol, value: p.shares > 0 && price ? p.shares * price : 0 };
-      }).filter(function (h) { return h.value > 0; });
     }
     try { window.Predictions.load(state.symbol, ctx); } catch (e) { /* non-fatal */ }
   }

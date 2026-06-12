@@ -172,8 +172,9 @@
 
     var pos = ctx.position;
     if (pos && pos.cost_basis && cards.position) {
-      var q = new URLSearchParams({ current_price: pos.current_price || pos.cost_basis,
-        cost_basis: pos.cost_basis });
+      // Do NOT send current_price — the sidecar fetches the real live price so P/L
+      // doesn't depend on the chart feed (which may be simulated/missing).
+      var q = new URLSearchParams({ cost_basis: pos.cost_basis });
       if (pos.shares) q.set('shares', pos.shares);
       if (pos.portfolio_value) q.set('portfolio_value', pos.portfolio_value);
       getJSON('/api/predict/position/' + encodeURIComponent(symbol) + '?' + q.toString())
