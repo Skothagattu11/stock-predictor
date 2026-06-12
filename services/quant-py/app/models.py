@@ -20,7 +20,8 @@ class TradeLevels(BaseModel):
     entry: float                     # suggested buy (long) / short price
     target: float                    # take-profit price
     stop: float                      # invalidation / stop-loss price
-    risk_reward: float               # reward:risk multiple of the target
+    risk_reward: float               # MEASURED reward:risk = target_dist / risk
+    move_pct: float = 0.0            # expected move to target, as a fraction of entry
 
 
 class IntradayPrediction(BaseModel):
@@ -31,6 +32,7 @@ class IntradayPrediction(BaseModel):
     regime: str
     regime_confidence: float = Field(ge=0.0, le=1.0)
     invalidation: float
+    conviction: float = Field(default=0.0, ge=0.0, le=1.0)   # how far from a coin-flip (0..1)
     drivers: list[Driver]
     levels: TradeLevels | None = None   # actionable entry/target/stop (None when no clean setup)
     as_of: str                       # ISO ts taken from the data, never wall-clock

@@ -48,6 +48,13 @@ def test_poor_reward_risk_drops_levels(bullish_df):
     # tiny daily move => realistic target smaller than the risk => no clean setup
     assert score_intraday("AAPL", bullish_df, interval_minutes=5, daily_atr=0.01).levels is None
 
+def test_conviction_and_move_pct_present(bullish_df):
+    p = score_intraday("AAPL", bullish_df, interval_minutes=5, daily_atr=50.0)
+    assert 0.0 <= p.conviction <= 1.0
+    assert p.levels is not None and p.levels.move_pct > 0
+    # move_pct is the target distance as a fraction of entry
+    assert abs(p.levels.move_pct - abs(p.levels.target - p.levels.entry) / p.levels.entry) < 1e-6
+
 def test_expected_move_widens_in_high_vol():
     import numpy as np, pandas as pd
     from tests.conftest import BASE_TS

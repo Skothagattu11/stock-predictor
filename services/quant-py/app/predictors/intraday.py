@@ -118,12 +118,12 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5,
     # stock's typical daily move (daily ATR), in the predicted direction. Reward:risk is
     # then MEASURED (target distance / risk) — never imposed. A setup whose realistic
     # reward is smaller than its risk is dropped (-> wait, no clean setup).
+    conviction = round(abs(probability_up - 0.5) * 2.0, 3)      # 0..1, how far from 50/50
     levels = None
     risk = abs(price - invalidation)
     if want is not None and risk > 0:
         direction = "long" if bias == "Bullish" else "short"
         sign = 1.0 if direction == "long" else -1.0
-        conviction = abs(probability_up - 0.5) * 2.0            # 0..1, from the model
         regime_mult = {"high_vol": 1.15, "range": 0.7}.get(regime.label, 1.0)
         if daily_atr and daily_atr > 0:
             move_fraction = (TARGET_BASE_FRACTION + TARGET_CONVICTION_FRACTION * conviction) * regime_mult
@@ -134,7 +134,8 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5,
             target = price + sign * dist
             levels = TradeLevels(direction=direction, entry=round(price, 4),
                                  target=round(target, 4), stop=round(invalidation, 4),
-                                 risk_reward=round(dist / risk, 2))
+                                 risk_reward=round(dist / risk, 2),
+                                 move_pct=round(dist / price, 4) if price else 0.0)
 
     last_ts = int(df["timestamp"].iloc[-1])
     as_of = datetime.fromtimestamp(last_ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -143,4 +144,4 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5,
         symbol=symbol, bias=bias, probability_up=round(probability_up, 4),
         expected_move=expected_move, regime=regime.label,
         regime_confidence=regime.confidence, invalidation=round(invalidation, 4),
-        drivers=shown, levels=levels, as_of=as_of)
+        conviction=conviction, drivers=shown, levels=levels, as_of=as_of)

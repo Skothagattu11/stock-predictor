@@ -76,7 +76,8 @@
     var conf = c.agreement || 0;
     var html =
       '<div class="pcard-head"><span class="phbadge">' + esc(horizon) + '</span>' + freshnessTag(data.quant && data.quant.as_of) + '</div>' +
-      '<div class="pcard-sig">' + signalChip(m.label, m.icon, m.cls, conf < 0.33) + confidenceMeter(conf) + '</div>' +
+      '<div class="pcard-sig">' + signalChip(m.label, m.icon, m.cls, conf < 0.33) + confidenceMeter(conf) +
+      convictionTag(data.quant) + '</div>' +
       driverPills(data.quant && data.quant.drivers) +
       (horizon.indexOf('Week') > -1 ? scenarioFan(data.quant) : '') +
       (horizon === 'Today' ? tradeLevels(data.quant) : '') +
@@ -84,17 +85,23 @@
       '<div class="pcard-foot">' + aiBadge(collectSources(data.models)) + '</div>';
     node.innerHTML = html;
   }
+  function convictionTag(quant) {
+    if (!quant || typeof quant.conviction !== 'number') return '';
+    return '<span class="pconv" title="How far the prediction is from a coin-flip">conviction ' +
+      Math.round(quant.conviction * 100) + '%</span>';
+  }
   function tradeLevels(quant) {
     var L = quant && quant.levels;
     if (!L) {
-      return '<div class="pmuted plvl-wait">No clean intraday setup yet — wait for a better entry.</div>';
+      return '<div class="pmuted plvl-wait">No clean intraday setup yet — reward:risk too low. Wait for a better entry.</div>';
     }
     var verb = L.direction === 'long' ? 'Buy near' : 'Short near';
+    var movePct = (L.move_pct != null ? ' <small class="pmv">(' + pct(L.direction === 'long' ? L.move_pct : -L.move_pct) + ')</small>' : '');
     return '<div class="plevels">' +
       '<div class="plvl"><span>' + verb + '</span><b>' + money(L.entry) + '</b></div>' +
-      '<div class="plvl"><span>Sell / target</span><b class="d-up">' + money(L.target) + '</b></div>' +
+      '<div class="plvl"><span>Sell / target</span><b class="d-up">' + money(L.target) + movePct + '</b></div>' +
       '<div class="plvl"><span>Stop</span><b class="d-dn">' + money(L.stop) + '</b></div>' +
-      '<div class="plvl"><span>Reward:Risk</span><b>' + L.risk_reward.toFixed(1) + '×</b></div>' +
+      '<div class="plvl"><span>Reward:Risk</span><b>' + L.risk_reward.toFixed(2) + '×</b></div>' +
       '</div>';
   }
   function collectSources(models) {
