@@ -166,6 +166,21 @@ def discover(providers=Depends(get_discover_providers)):
     return result
 
 
+from app.predictors.statistical import forecast as statistical_forecast
+from app.models import StatPrediction
+
+@app.get("/predict/statistical/{symbol}", response_model=StatPrediction)
+def predict_statistical(symbol: str, mode: str = "intraday", md: MarketData = Depends(get_market_data)):
+    symbol = symbol.upper()
+    if mode == "outlook":
+        df = md.fetch_candles(symbol, interval="1d", range_="2y")
+    else:
+        df = md.fetch_candles(symbol, interval="5m", range_="1d")
+    if df.empty or len(df) < 11:
+        raise HTTPException(status_code=422, detail="insufficient history for statistical forecast")
+    return statistical_forecast(symbol, df, mode=mode)
+
+
 from app.predictors.setups import scan_setups
 from app.models import SetupTimeline
 
