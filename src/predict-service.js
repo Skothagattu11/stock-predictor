@@ -8,6 +8,7 @@ const TTL = {
   fundamentals: 12 * 60 * 60 * 1000, // 12 h
   impliedMove: 5 * 60 * 1000,      // 5 min
   setups: 60 * 1000,               // 1 min
+  discover: 10 * 60 * 1000,        // 10 min
 };
 
 function createPredictService({ sidecar, cache }) {
@@ -21,6 +22,7 @@ function createPredictService({ sidecar, cache }) {
     position: (symbol, params) => sidecar.position({ symbol, ...params }),  // uncached
     portfolio: (holdings) => sidecar.portfolio(holdings),                   // uncached
     setups: (s, interval) => cached('setups', `${s}:${interval || '1m'}`, () => sidecar.setups(s, interval)),
+    discover: () => cached('discover', 'ALL', () => sidecar.discover()),
   };
 }
 

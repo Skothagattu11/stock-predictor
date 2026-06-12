@@ -40,3 +40,12 @@ test('setups is cached', async () => {
   await svc.setups('AAPL'); await svc.setups('AAPL');
   assert.equal(counts.s, 1);
 });
+
+test('discover is cached', async () => {
+  const counts = {};
+  const sidecar = { discover: async () => (counts.d = (counts.d || 0) + 1, { hot: [], penny: [], shine: [] }) };
+  const { createPredictService } = require('../src/predict-service');
+  const svc = createPredictService({ sidecar, cache: new (require('../src/cache').TtlCache)() });
+  await svc.discover(); await svc.discover();
+  assert.equal(counts.d, 1);
+});
