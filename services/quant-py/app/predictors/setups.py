@@ -59,9 +59,10 @@ def _candle_pattern(o, h, l, c, i):
         return ("Bullish engulfing", "long", "Bullish engulfing candle")
     if cur_bear and prev_bull and o.iloc[i] >= c.iloc[i - 1] and c.iloc[i] <= o.iloc[i - 1]:
         return ("Bearish engulfing", "short", "Bearish engulfing candle")
-    if body > 0 and lower >= 2 * body and upper <= body:
+    tol = body * 0.05 + 1e-9   # small tolerance for floating-point imprecision
+    if body > 0 and lower >= 2 * body and upper <= body + tol:
         return ("Hammer", "long", "Hammer — long lower wick, buyers stepped in")
-    if body > 0 and upper >= 2 * body and lower <= body:
+    if body > 0 and upper >= 2 * body and lower <= body + tol:
         return ("Shooting star", "short", "Shooting star — long upper wick, sellers stepped in")
     return None
 
