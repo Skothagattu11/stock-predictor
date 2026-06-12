@@ -146,6 +146,26 @@ def predict_position(symbol: str, cost_basis: float, current_price: float | None
                            intraday_bias=intraday_bias, outlook_stance=outlook_stance)
 
 
+from app.data.fmp_market import FmpMarket
+from app.data.yahoo_screener import YahooScreener
+from app.discovery.scanner import build_discover
+from app.models import DiscoverResult
+
+def get_discover_providers():
+    fmp = FmpMarket(api_key=config.FMP_API_KEY) if config.FMP_API_KEY else None
+    return fmp, YahooScreener()      # Yahoo always available as backup (keyless/crumb)
+
+@app.get("/discover", response_model=DiscoverResult)
+def discover(providers=Depends(get_discover_providers)):
+    fmp, yahoo = providers
+    if fmp is None and yahoo is None:
+        raise HTTPException(status_code=503, detail="no screener provider configured")
+    result = build_discover(fmp, yahoo=yahoo)
+    if not (result.hot or result.penny or result.shine):
+        raise HTTPException(status_code=503, detail="screener returned no data (rate-limited or no key)")
+    return result
+
+
 from app.predictors.setups import scan_setups
 from app.models import SetupTimeline
 

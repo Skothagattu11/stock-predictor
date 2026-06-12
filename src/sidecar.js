@@ -44,6 +44,7 @@ function createSidecar({ baseUrl = (process.env.QUANT_SIDECAR_URL || ''), fetchI
     fundamentals: (s) => request('GET', `/context/fundamentals/${encodeURIComponent(s)}`),
     impliedMove: (s) => request('GET', `/context/implied-move/${encodeURIComponent(s)}`),
     setups: (s, interval) => request('GET', `/predict/setups/${encodeURIComponent(s)}?interval=${encodeURIComponent(interval || '1m')}`),
+    discover: () => request('GET', '/discover'),
   };
 }
 
