@@ -1,8 +1,20 @@
 from fastapi import FastAPI, Depends, HTTPException
+from app import indicators as ind
 from app.data.base import MarketData
 from app.data.yahoo import YahooMarketData
 from app.predictors.intraday import score_intraday
 from app.models import IntradayPrediction
+
+
+def _daily_atr(md: MarketData, symbol: str) -> float | None:
+    """Typical daily range (ATR-14 on daily bars) — anchors realistic intraday targets."""
+    try:
+        ddf = md.fetch_candles(symbol, interval="1d", range_="3mo")
+        if ddf.empty or len(ddf) < 15:
+            return None
+        return float(ind.atr(ddf["high"], ddf["low"], ddf["close"], 14).iloc[-1])
+    except Exception:
+        return None
 
 app = FastAPI(title="quant-py", version="0.1.0")
 
@@ -23,10 +35,12 @@ def predict_intraday(symbol: str, interval: str = "1m",
                      md: MarketData = Depends(get_market_data)):
     # 1-minute bars so the read is live early in the session (usable ~15 min after
     # the open) and as_of tracks the current minute.
-    df = md.fetch_candles(symbol.upper(), interval=interval, range_="1d")
+    sym = symbol.upper()
+    df = md.fetch_candles(sym, interval=interval, range_="1d")
     if df.empty or len(df) < 15:
         raise HTTPException(status_code=422, detail="insufficient candles for intraday analysis")
-    return score_intraday(symbol.upper(), df, interval_minutes=_INTERVAL_MINUTES.get(interval, 1))
+    return score_intraday(sym, df, interval_minutes=_INTERVAL_MINUTES.get(interval, 1),
+                          daily_atr=_daily_atr(md, sym))
 
 
 from app import config

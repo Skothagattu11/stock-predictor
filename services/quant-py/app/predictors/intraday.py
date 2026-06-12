@@ -17,7 +17,11 @@ RELVOL_BREAKOUT_MIN = 1.3
 BULLISH_PROB = 0.58
 BEARISH_PROB = 0.42
 HIGH_VOL_MOVE_MULT = 1.5
-TARGET_R = 1.8           # reward:risk multiple for the profit target
+TARGET_R = 1.8                 # fallback reward:risk when no daily ATR is available
+# Target = (base + conviction*slope) * regime_mult * daily_ATR, in the predicted
+# direction. The move scales with the prediction's strength; R:R is then measured.
+TARGET_BASE_FRACTION = 0.35
+TARGET_CONVICTION_FRACTION = 0.45
 
 # signal weights (centered at 0; positive => bullish)
 W_VWAP, W_EMA, W_RSI, W_ORB, W_MOM = 1.4, 1.0, 0.6, 1.2, 0.8
@@ -31,7 +35,8 @@ def _bars(minutes: int, interval_minutes: int) -> int:
     return max(1, math.ceil(minutes / interval_minutes))
 
 
-def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5) -> IntradayPrediction:
+def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5,
+                   daily_atr: float | None = None) -> IntradayPrediction:
     close = df["close"]
     price = float(close.iloc[-1])
     atr_now = float(ind.atr(df["high"], df["low"], close, 14).iloc[-1])
@@ -108,20 +113,28 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5) -> 
     else:
         shown = [Driver(name=n, direction=d) for (n, d, c) in drivers if d == want]
 
-    # Actionable trade levels: entry at current price, stop at the invalidation,
-    # target at TARGET_R x risk in the bias direction (favorable reward:risk).
+    # Actionable trade levels. Stop = invalidation (intraday structure) -> defines risk.
+    # Target is derived from the PREDICTION: a conviction- and regime-scaled share of the
+    # stock's typical daily move (daily ATR), in the predicted direction. Reward:risk is
+    # then MEASURED (target distance / risk) — never imposed. A setup whose realistic
+    # reward is smaller than its risk is dropped (-> wait, no clean setup).
     levels = None
     risk = abs(price - invalidation)
     if want is not None and risk > 0:
-        if bias == "Bullish":
-            target = price + TARGET_R * risk
-            direction = "long"
+        direction = "long" if bias == "Bullish" else "short"
+        sign = 1.0 if direction == "long" else -1.0
+        conviction = abs(probability_up - 0.5) * 2.0            # 0..1, from the model
+        regime_mult = {"high_vol": 1.15, "range": 0.7}.get(regime.label, 1.0)
+        if daily_atr and daily_atr > 0:
+            move_fraction = (TARGET_BASE_FRACTION + TARGET_CONVICTION_FRACTION * conviction) * regime_mult
+            dist = move_fraction * daily_atr                    # expected move from the prediction
         else:
-            target = price - TARGET_R * risk
-            direction = "short"
-        levels = TradeLevels(direction=direction, entry=round(price, 4),
-                             target=round(target, 4), stop=round(invalidation, 4),
-                             risk_reward=TARGET_R)
+            dist = TARGET_R * risk                              # fallback when no daily ATR
+        if dist >= risk:                                        # only offer when reward >= risk
+            target = price + sign * dist
+            levels = TradeLevels(direction=direction, entry=round(price, 4),
+                                 target=round(target, 4), stop=round(invalidation, 4),
+                                 risk_reward=round(dist / risk, 2))
 
     last_ts = int(df["timestamp"].iloc[-1])
     as_of = datetime.fromtimestamp(last_ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

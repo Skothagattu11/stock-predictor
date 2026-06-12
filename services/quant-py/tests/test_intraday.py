@@ -34,6 +34,20 @@ def test_bearish_levels_short_target_below_entry_below_stop(bearish_df):
 def test_neutral_has_no_levels(flat_df):
     assert score_intraday("AAPL", flat_df, interval_minutes=5).levels is None
 
+def test_target_derived_from_prediction_and_rr_measured(bullish_df):
+    # target = a conviction/regime-scaled share of the daily move; R:R is measured
+    p = score_intraday("AAPL", bullish_df, interval_minutes=5, daily_atr=50.0)
+    assert p.levels is not None
+    dist = abs(p.levels.target - p.levels.entry)
+    assert 0.25 * 50.0 <= dist <= 1.0 * 50.0            # a realistic share of the daily move
+    risk = abs(p.levels.entry - p.levels.stop)
+    assert abs(p.levels.risk_reward - round(dist / risk, 2)) < 0.01   # MEASURED from target/stop
+    assert p.levels.risk_reward != 1.8                  # not a fixed ratio
+
+def test_poor_reward_risk_drops_levels(bullish_df):
+    # tiny daily move => realistic target smaller than the risk => no clean setup
+    assert score_intraday("AAPL", bullish_df, interval_minutes=5, daily_atr=0.01).levels is None
+
 def test_expected_move_widens_in_high_vol():
     import numpy as np, pandas as pd
     from tests.conftest import BASE_TS
