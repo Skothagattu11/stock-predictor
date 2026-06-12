@@ -22,6 +22,7 @@ TARGET_R = 1.8                 # fallback reward:risk when no daily ATR is avail
 # direction. The move scales with the prediction's strength; R:R is then measured.
 TARGET_BASE_FRACTION = 0.35
 TARGET_CONVICTION_FRACTION = 0.45
+STOP_ATR_FRACTION = 0.3        # stop distance capped at ~0.3x the daily move (tightened to structure)
 
 # signal weights (centered at 0; positive => bullish)
 W_VWAP, W_EMA, W_RSI, W_ORB, W_MOM = 1.4, 1.0, 0.6, 1.2, 0.8
@@ -120,20 +121,29 @@ def score_intraday(symbol: str, df: pd.DataFrame, interval_minutes: int = 5,
     # reward is smaller than its risk is dropped (-> wait, no clean setup).
     conviction = round(abs(probability_up - 0.5) * 2.0, 3)      # 0..1, how far from 50/50
     levels = None
-    risk = abs(price - invalidation)
-    if want is not None and risk > 0:
+    if want is not None:
         direction = "long" if bias == "Bullish" else "short"
         sign = 1.0 if direction == "long" else -1.0
         regime_mult = {"high_vol": 1.15, "range": 0.7}.get(regime.label, 1.0)
         if daily_atr and daily_atr > 0:
+            # Stop = volatility-based distance, tightened to structure so risk stays
+            # sane even when price has run far from the opening range. (max/min picks
+            # the level CLOSER to price for a long/short -> caps the risk.)
+            stop_dist = STOP_ATR_FRACTION * daily_atr
+            if direction == "long":
+                stop = max(or_low, price - stop_dist) if or_low < price else price - stop_dist
+            else:
+                stop = min(or_high, price + stop_dist) if or_high > price else price + stop_dist
             move_fraction = (TARGET_BASE_FRACTION + TARGET_CONVICTION_FRACTION * conviction) * regime_mult
             dist = move_fraction * daily_atr                    # expected move from the prediction
         else:
-            dist = TARGET_R * risk                              # fallback when no daily ATR
-        if dist >= risk:                                        # only offer when reward >= risk
+            stop = invalidation                                 # fallback: structural stop
+            dist = TARGET_R * abs(price - stop)
+        risk = abs(price - stop)
+        if risk > 0 and dist >= risk:                           # only offer when reward >= risk
             target = price + sign * dist
             levels = TradeLevels(direction=direction, entry=round(price, 4),
-                                 target=round(target, 4), stop=round(invalidation, 4),
+                                 target=round(target, 4), stop=round(stop, 4),
                                  risk_reward=round(dist / risk, 2),
                                  move_pct=round(dist / price, 4) if price else 0.0)
 

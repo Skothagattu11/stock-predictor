@@ -44,9 +44,14 @@ def test_target_derived_from_prediction_and_rr_measured(bullish_df):
     assert abs(p.levels.risk_reward - round(dist / risk, 2)) < 0.01   # MEASURED from target/stop
     assert p.levels.risk_reward != 1.8                  # not a fixed ratio
 
-def test_poor_reward_risk_drops_levels(bullish_df):
-    # tiny daily move => realistic target smaller than the risk => no clean setup
-    assert score_intraday("AAPL", bullish_df, interval_minutes=5, daily_atr=0.01).levels is None
+def test_stop_is_volatility_bounded_not_far_opening_range(bullish_df):
+    # stop is capped to ~STOP_ATR_FRACTION x daily ATR so a directional read yields a
+    # usable setup even when price has run from the opening range (fixes "bullish but no setup")
+    p = score_intraday("AAPL", bullish_df, interval_minutes=5, daily_atr=20.0)
+    assert p.levels is not None
+    risk = abs(p.levels.entry - p.levels.stop)
+    assert risk <= 0.3 * 20.0 + 1e-6
+    assert p.levels.risk_reward >= 1.0
 
 def test_conviction_and_move_pct_present(bullish_df):
     p = score_intraday("AAPL", bullish_df, interval_minutes=5, daily_atr=50.0)

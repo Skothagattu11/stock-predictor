@@ -93,7 +93,7 @@
   function tradeLevels(quant) {
     var L = quant && quant.levels;
     if (!L) {
-      return '<div class="pmuted plvl-wait">No clean intraday setup yet — reward:risk too low. Wait for a better entry.</div>';
+      return '<div class="pmuted plvl-wait">No directional edge right now (neutral) — wait for a clearer signal.</div>';
     }
     var verb = L.direction === 'long' ? 'Buy near' : 'Short near';
     var movePct = (L.move_pct != null ? ' <small class="pmv">(' + pct(L.direction === 'long' ? L.move_pct : -L.move_pct) + ')</small>' : '');
