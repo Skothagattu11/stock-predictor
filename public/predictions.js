@@ -153,6 +153,62 @@
       '<div class="pmuted">Analyzing…</div>';
   }
 
+  // ---- Intraday Windows panel ----------------------------------------------
+  var PHASE_LABEL = { pre: 'Pre-market', open_drive: 'Open drive', morning: 'Morning trend',
+    midday: 'Midday (avoid)', afternoon: 'Afternoon', power_hour: 'Power hour', closed: 'Closed' };
+  var PHASES = ['open_drive', 'morning', 'midday', 'afternoon', 'power_hour'];
+
+  function phaseStrip(current) {
+    return '<div class="pwphase">' + PHASES.map(function (p) {
+      var cls = p === current ? ' pwp-now' : ''; cls += (p === 'midday' ? ' pwp-bad' : '');
+      return '<span class="pwp' + cls + '">' + PHASE_LABEL[p] + '</span>';
+    }).join('<span class="pwp-sep">›</span>') + '</div>';
+  }
+  function setupRow(s) {
+    var dirCls = s.direction === 'long' ? 'd-up' : 'd-dn';
+    var statusMap = { triggered_win: '✓ hit target', triggered_loss: '✗ stopped', active: '● live' };
+    var t = new Date(s.time);
+    var hhmm = isNaN(t) ? '' : t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    var qcls = s.quality === 'high' ? 'pq-high' : s.quality === 'low' ? 'pq-low' : 'pq-med';
+    return '<div class="pwrow ' + (s.status === 'active' ? 'pwrow-active' : '') + '">' +
+      '<span class="pw-t">' + hhmm + '</span>' +
+      '<span class="pw-type">' + esc(s.type) + ' <i class="' + dirCls + '">' + (s.direction === 'long' ? 'LONG' : 'SHORT') + '</i></span>' +
+      '<span class="pw-lv">' + money(s.entry) + ' → <b class="d-up">' + money(s.target) + '</b> / <b class="d-dn">' + money(s.stop) + '</b></span>' +
+      '<span class="pw-rr">' + s.risk_reward.toFixed(1) + '×</span>' +
+      '<span class="pw-st ' + qcls + '">' + (statusMap[s.status] || s.status) + '</span></div>';
+  }
+  function keyLevels(levels) {
+    if (!levels || !levels.length) return '';
+    var res = levels.filter(function (l) { return l.kind === 'resistance'; });
+    var sup = levels.filter(function (l) { return l.kind === 'support'; });
+    function chips(arr, cls) {
+      return arr.map(function (l) {
+        return '<span class="pkl ' + cls + '" title="' + esc(l.label) + '">' + money(l.price) + '</span>';
+      }).join('');
+    }
+    return '<div class="pkeylv">' +
+      '<div class="pkl-row"><span>Sell / resistance</span>' + chips(res, 'pkl-res') + '</div>' +
+      '<div class="pkl-row"><span>Buy / support</span>' + chips(sup, 'pkl-sup') + '</div></div>';
+  }
+  function windowsCard(node, data) {
+    var head = '<div class="pcard-head"><span class="phbadge">Intraday windows</span>' + freshnessTag(data.as_of) + '</div>';
+    var strip = phaseStrip(data.phase);
+    var watch = data.watch ? '<div class="pwwatch">' + esc(data.watch) + '</div>' : '';
+    var levels = keyLevels(data.levels);
+    var rows = (data.setups && data.setups.length)
+      ? '<div class="pwrows">' + data.setups.slice().reverse().map(setupRow).join('') + '</div>'
+      : '<div class="pmuted">No setups triggered yet this session.</div>';
+    node.innerHTML = head + strip + watch + levels + rows + '<div class="pcard-foot">' + aiBadge([]) + '</div>';
+  }
+  function loadWindows(symbol) {
+    var node = el('predWindows');
+    if (!node) return;
+    loadingCard(node, 'Intraday windows');
+    getJSON('/api/predict/setups/' + encodeURIComponent(symbol))
+      .then(function (d) { windowsCard(node, d); })
+      .catch(function (e) { errorCard(node, 'Intraday windows', e); });
+  }
+
   // ---- orchestration -------------------------------------------------------
   async function load(symbol, ctx) {
     ctx = ctx || {};
@@ -161,6 +217,7 @@
     if (!cards.intraday) return;   // section not present
 
     loadingCard(cards.intraday, 'Today'); loadingCard(cards.outlook, 'Weeks–Months');
+    loadWindows(symbol);
 
     getJSON('/api/insight/intraday/' + encodeURIComponent(symbol))
       .then(function (d) { insightCard(cards.intraday, d, 'Today'); })

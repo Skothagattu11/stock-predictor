@@ -31,3 +31,12 @@ test('position is uncached pass-through (param-specific)', async () => {
   await svc.position('AAPL', { current_price: 131, cost_basis: 100 });
   assert.equal(counts.position, 2);
 });
+
+test('setups is cached', async () => {
+  const counts = {};
+  const sidecar = { setups: async (s) => (counts.s = (counts.s || 0) + 1, { symbol: s, setups: [] }) };
+  const { createPredictService } = require('../src/predict-service');
+  const svc = createPredictService({ sidecar, cache: new (require('../src/cache').TtlCache)() });
+  await svc.setups('AAPL'); await svc.setups('AAPL');
+  assert.equal(counts.s, 1);
+});
