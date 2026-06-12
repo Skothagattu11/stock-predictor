@@ -2,6 +2,37 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class Setup(BaseModel):
+    time: str
+    type: str
+    direction: Literal["long", "short"]
+    entry: float
+    target: float
+    stop: float
+    risk_reward: float
+    trigger: str
+    phase: str
+    quality: Literal["high", "medium", "low", "none"]
+    status: Literal["triggered_win", "triggered_loss", "active"]
+
+
+class KeyLevel(BaseModel):
+    price: float
+    kind: Literal["support", "resistance"]
+    label: str            # e.g. "prior-day high", "session low", "round number", "swing high"
+
+
+class SetupTimeline(BaseModel):
+    symbol: str
+    phase: str
+    phase_quality: Literal["high", "medium", "low", "none"]
+    setups: list[Setup]
+    levels: list[KeyLevel] = []     # support/resistance for buy-low / sell-high framing
+    watch: str | None = None
+    as_of: str
+    source: Literal["quant"] = "quant"
+
+
 
 class Driver(BaseModel):
     name: str
