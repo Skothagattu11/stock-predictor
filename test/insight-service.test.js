@@ -40,3 +40,25 @@ test('outlook maps Cautious => bearish quant vote', async () => {
   const out = await svc.insight('outlook', 'AAPL');
   assert.equal(out.consensus.stance, 'bearish');
 });
+
+test('statistical voice joins consensus when available', async () => {
+  const predictService = {
+    intraday: async (s) => ({ symbol: s, bias: 'Bullish', probability_up: 0.7 }),
+    statistical: async () => ({ stance: 'bullish', confidence: 0.5 }),
+  };
+  const router = { size: 0, ensemble: async () => [] };
+  const { createInsightService } = require('../src/insight-service');
+  const svc = createInsightService({ predictService, router });
+  const out = await svc.insight('intraday', 'AAPL');
+  const names = out.consensus.votes.map((v) => v.name);
+  assert.ok(names.includes('quant'));
+  assert.ok(names.includes('statistical'));
+});
+
+test('missing statistical method is skipped gracefully', async () => {
+  const predictService = { intraday: async (s) => ({ symbol: s, bias: 'Bullish', probability_up: 0.7 }) };
+  const router = { size: 0, ensemble: async () => [] };
+  const { createInsightService } = require('../src/insight-service');
+  const out = await createInsightService({ predictService, router }).insight('intraday', 'AAPL');
+  assert.deepEqual(out.consensus.votes.map((v) => v.name), ['quant']);
+});
