@@ -109,11 +109,17 @@ const { buildAdapters } = require('./llm/adapters');
 const { createRouter: createLlmRouter } = require('./llm/router');
 const { createInsightService } = require('./insight-service');
 const { createInsightRouter } = require('./insight-routes');
+const { createTvStore, createTvRouter } = require('./tv-webhook');
+
+// TradingView / Pine alerts -> a signal voice in the consensus.
+const tvStore = createTvStore();
+app.use('/api/tv', createTvRouter({ store: tvStore, secret: config.TV_WEBHOOK_SECRET }));
 
 const llmRouter = createLlmRouter({ adapters: buildAdapters(config) });
-const insightService = createInsightService({ predictService, router: llmRouter });
+const insightService = createInsightService({ predictService, router: llmRouter, tvAlerts: tvStore });
 app.use('/api/insight', createInsightRouter({ insightService }));
 console.log(`[llm] ensemble providers configured: ${llmRouter.size}`);
+console.log(`[tv] webhook ready at /api/tv/webhook (secret ${config.TV_WEBHOOK_SECRET ? 'set' : 'NOT set'})`);
 
 const WATCHLIST = (process.env.WATCHLIST || 'AAPL,MSFT,NVDA,SPY').split(',').map((s) => s.trim()).filter(Boolean);
 if (config.QUANT_SIDECAR_URL) {

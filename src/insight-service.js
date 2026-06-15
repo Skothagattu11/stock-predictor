@@ -20,7 +20,7 @@ function quantConfidence(mode, q) {
   return typeof q.confidence === 'number' ? q.confidence : 0.5;
 }
 
-function createInsightService({ predictService, router }) {
+function createInsightService({ predictService, router, tvAlerts }) {
   async function insight(mode, symbol) {
     const quant = await predictService[mode](symbol);
     const quantVote = { name: 'quant', stance: quantStance(mode, quant), confidence: quantConfidence(mode, quant) };
@@ -40,8 +40,18 @@ function createInsightService({ predictService, router }) {
       } catch (e) { /* skip voice */ }
     }
 
+    // TradingView / Pine alert voice — a recent alert for this symbol, if any
+    let tvVote = null;
+    if (tvAlerts && typeof tvAlerts.latest === 'function') {
+      try {
+        const a = tvAlerts.latest(symbol);
+        if (a && a.stance) tvVote = { name: 'tradingview', stance: a.stance, confidence: 0.7 };
+      } catch (e) { /* skip voice */ }
+    }
+
     const votes = [quantVote,
       ...(statVote ? [statVote] : []),
+      ...(tvVote ? [tvVote] : []),
       ...models.map((m) => ({ name: m.name, stance: m.stance, confidence: m.confidence }))];
     return { mode, symbol, quant, models, consensus: buildConsensus(votes) };
   }

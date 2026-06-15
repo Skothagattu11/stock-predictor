@@ -62,3 +62,13 @@ test('missing statistical method is skipped gracefully', async () => {
   const out = await createInsightService({ predictService, router }).insight('intraday', 'AAPL');
   assert.deepEqual(out.consensus.votes.map((v) => v.name), ['quant']);
 });
+
+test('TradingView alert joins consensus when present and recent', async () => {
+  const predictService = { intraday: async (s) => ({ symbol: s, bias: 'Bullish', probability_up: 0.7 }) };
+  const router = { size: 0, ensemble: async () => [] };
+  const tvAlerts = { latest: (s) => (s === 'AAPL' ? { stance: 'bearish' } : null) };
+  const { createInsightService } = require('../src/insight-service');
+  const out = await createInsightService({ predictService, router, tvAlerts }).insight('intraday', 'AAPL');
+  const tv = out.consensus.votes.find((v) => v.name === 'tradingview');
+  assert.ok(tv && tv.stance === 'bearish');
+});

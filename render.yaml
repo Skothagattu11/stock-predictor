@@ -22,6 +22,10 @@ services:
           type: web
           name: quant-py
           property: host
+      # Shared secret for the TradingView/Pine alert webhook (/api/tv/webhook).
+      # Set a value in the dashboard; include the same "secret" in your alert JSON.
+      - key: TV_WEBHOOK_SECRET
+        sync: false
 
   # Python quant/ML sidecar (FastAPI). Built from its own Dockerfile.
   # plan: starter (paid) avoids sleep/cold-starts and gives more RAM than free —
