@@ -110,10 +110,20 @@ const { createRouter: createLlmRouter } = require('./llm/router');
 const { createInsightService } = require('./insight-service');
 const { createInsightRouter } = require('./insight-routes');
 const { createTvStore, createTvRouter } = require('./tv-webhook');
+const { createResend, createAlertsService } = require('./alerts-service');
+const { createAlertsRouter } = require('./alerts-routes');
 
 // TradingView / Pine alerts -> a signal voice in the consensus.
 const tvStore = createTvStore();
 app.use('/api/tv', createTvRouter({ store: tvStore, secret: config.TV_WEBHOOK_SECRET }));
+
+// Email alerts (Resend) for position exit-plan target/stop hits. Emails are held
+// in memory only (never persisted); the browser re-subscribes each session.
+const resend = createResend({ apiKey: config.RESEND_API_KEY, from: config.ALERT_FROM_EMAIL });
+const alertsService = createAlertsService({ predictService, resend });
+app.use('/api/alerts', createAlertsRouter({ alertsService, resendEnabled: resend.enabled }));
+if (resend.enabled) { alertsService.start(60 * 1000); }
+console.log(`[alerts] email alerts ${resend.enabled ? 'ON (Resend)' : 'off (no RESEND_API_KEY)'}`);
 
 const llmRouter = createLlmRouter({ adapters: buildAdapters(config) });
 const insightService = createInsightService({ predictService, router: llmRouter, tvAlerts: tvStore });

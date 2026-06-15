@@ -309,6 +309,11 @@
     .pwp-sel { background:var(--blue,#5aa7ff); color:#04101f; font-weight:700; border-color:var(--blue,#5aa7ff); }
     .pwp-now { color:var(--text,#e8eef8); border-color:var(--blue,#3a7bd5); background:#16203a; }
     .plvl-hd { font-size:11px; color:var(--muted,#95a3b8); margin-bottom:6px; text-transform:uppercase; letter-spacing:.4px; }
+    .alertsbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; font-size:13px; color:var(--muted,#95a3b8); }
+    .alerts-btn { background:#1a2236; border:1px solid var(--line,#243149); color:var(--text,#e8eef8); border-radius:999px; padding:5px 12px; cursor:pointer; font-size:13px; }
+    .alerts-btn.on { background:#10241b; border-color:#1f5a3f; color:#39d98a; }
+    .alertsbar input[type=email] { width:200px; padding:5px 9px; }
+    .alerts-chk { display:inline-flex; align-items:center; gap:6px; }
     .plvl-dir { font-size:12px; margin-bottom:8px; color:var(--text,#e8eef8); }
     .plvl-out { font-size:12px; margin-top:8px; padding:6px 9px; border-radius:8px; background:var(--panel2,#111b2d);
       border:1px solid var(--line,#243149); color:var(--muted,#95a3b8); }
@@ -464,6 +469,11 @@
 
     <!-- Predictions section: horizon ribbon + Market/Your view cards -->
     <section class="predictions" id="predictions">
+      <div class="alertsbar">
+        <button id="alertsToggle" class="alerts-btn">🔕 Enable alerts</button>
+        <input id="alertEmail" type="email" placeholder="you@email.com" />
+        <label class="alerts-chk"><input id="emailAlertToggle" type="checkbox" /> Email me on target/stop (while position is open)</label>
+      </div>
       <div class="pribbon">
         <span class="pribbon-step">Today</span><span class="pribbon-sep">—</span>
         <span class="pribbon-step">Days</span><span class="pribbon-sep">—</span>
@@ -638,5 +648,6 @@
   <script src="app.js"></script>
   <script src="predictions.js"></script>
   <script src="discover.js"></script>
+  <script src="alerts.js"></script>
 </body>
 </html>

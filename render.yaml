@@ -24,6 +24,12 @@ services:
       # Set a value in the dashboard; include the same "secret" in your alert JSON.
       - key: TV_WEBHOOK_SECRET
         sync: false
+      # Email alerts via Resend (resend.com). Set the API key in the dashboard;
+      # ALERT_FROM_EMAIL must be a verified sender (or use onboarding@resend.dev to test).
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ALERT_FROM_EMAIL
+        sync: false
 
   # Python quant/ML sidecar (FastAPI). Built from its own Dockerfile.
   # plan: starter (paid) avoids sleep/cold-starts and gives more RAM than free —

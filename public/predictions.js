@@ -358,7 +358,8 @@
     if (!node) { renderTrack(); return; }
     loadingCard(node, 'Intraday windows');
     getJSON('/api/predict/setups/' + encodeURIComponent(symbol) + '?interval=' + encodeURIComponent(interval || getWinTF()))
-      .then(function (d) { windowsCard(node, d); logSetups(symbol, d.setups); renderTrack(); })
+      .then(function (d) { windowsCard(node, d); logSetups(symbol, d.setups); renderTrack();
+        if (window.Alerts) window.Alerts.check(symbol, { setups: d.setups }); })
       .catch(function (e) { errorCard(node, 'Intraday windows', e); renderTrack(); });
   }
 
@@ -371,10 +372,14 @@
 
     loadingCard(cards.intraday, 'Today'); loadingCard(cards.outlook, 'Weeks–Months');
     lastSymbol = symbol;
+    if (window.Alerts) { window.Alerts.noteCtx(symbol, ctx.position || null); window.Alerts.syncEmail(symbol, ctx.position || null); }
     loadWindows(symbol, getWinTF());
 
     getJSON('/api/insight/intraday/' + encodeURIComponent(symbol))
-      .then(function (d) { insightCard(cards.intraday, d, 'Today'); })
+      .then(function (d) {
+        insightCard(cards.intraday, d, 'Today');
+        if (window.Alerts) window.Alerts.check(symbol, { bias: d.consensus && d.consensus.stance, price: d.quant && d.quant.levels && d.quant.levels.entry });
+      })
       .catch(function (e) { errorCard(cards.intraday, 'Today', e); });
 
     getJSON('/api/insight/outlook/' + encodeURIComponent(symbol))
@@ -389,7 +394,11 @@
       if (pos.shares) q.set('shares', pos.shares);
       if (pos.portfolio_value) q.set('portfolio_value', pos.portfolio_value);
       getJSON('/api/predict/position/' + encodeURIComponent(symbol) + '?' + q.toString())
-        .then(function (d) { positionCard(cards.position, d); })
+        .then(function (d) {
+          positionCard(cards.position, d);
+          if (window.Alerts) window.Alerts.check(symbol, { exitPlan: d.exit_plan,
+            price: pos.cost_basis * (1 + (d.unrealized_pnl_pct || 0)) });
+        })
         .catch(function (e) { errorCard(cards.position, 'Your position', e); });
     } else if (cards.position) {
       cards.position.innerHTML = '<div class="pcard-head"><span class="phbadge">Your position</span></div>' +

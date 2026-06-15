@@ -12,6 +12,8 @@ const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').trim();
 const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
 const PERPLEXITY_API_KEY = (process.env.PERPLEXITY_API_KEY || '').trim();
 const TV_WEBHOOK_SECRET = (process.env.TV_WEBHOOK_SECRET || '').trim();
+const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
+const ALERT_FROM_EMAIL = (process.env.ALERT_FROM_EMAIL || 'alerts@resend.dev').trim();
 
 module.exports = {
   FINNHUB_API_KEY,
@@ -23,6 +25,8 @@ module.exports = {
   ANTHROPIC_API_KEY,
   PERPLEXITY_API_KEY,
   TV_WEBHOOK_SECRET,
+  RESEND_API_KEY,
+  ALERT_FROM_EMAIL,
   hasKey: Boolean(FINNHUB_API_KEY),
   hasGemini: Boolean(GEMINI_API_KEY),
 };
