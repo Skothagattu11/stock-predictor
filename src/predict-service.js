@@ -9,6 +9,7 @@ const TTL = {
   impliedMove: 5 * 60 * 1000,      // 5 min
   setups: 60 * 1000,               // 1 min
   discover: 10 * 60 * 1000,        // 10 min
+  statistical: 120 * 1000,          // 2 min
 };
 
 function createPredictService({ sidecar, cache }) {
@@ -23,6 +24,7 @@ function createPredictService({ sidecar, cache }) {
     portfolio: (holdings) => sidecar.portfolio(holdings),                   // uncached
     setups: (s, interval) => cached('setups', `${s}:${interval || '1m'}`, () => sidecar.setups(s, interval)),
     discover: () => cached('discover', 'ALL', () => sidecar.discover()),
+    statistical: (s, mode) => cached('statistical', `${s}:${mode}`, () => sidecar.statistical(s, mode)),
   };
 }
 

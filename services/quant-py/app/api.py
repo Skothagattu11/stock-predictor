@@ -44,7 +44,7 @@ def predict_intraday(symbol: str, interval: str = "1m",
 
 
 from app import config
-from app.context.models import MacroSnapshot, ImpliedMove, FundamentalsResult
+from app.context.models import MacroSnapshot, ImpliedMove, FundamentalsResult, SentimentSnapshot
 from app.context.crosscheck import merge_fundamentals
 from app.data.base import FundamentalsProvider, MacroProvider, OptionsProvider
 from app.data.fred import FredMacro
@@ -97,6 +97,20 @@ def context_macro(provider: MacroProvider | None = Depends(get_macro_provider)):
 @app.get("/context/implied-move/{symbol}", response_model=ImpliedMove)
 def context_implied_move(symbol: str, provider: OptionsProvider = Depends(get_options_provider)):
     return provider.fetch_implied_move(symbol.upper())
+
+
+from app.data.news_sentiment import NewsSentiment
+
+
+def get_sentiment_provider():
+    return NewsSentiment(api_key=config.FINNHUB_API_KEY) if config.FINNHUB_API_KEY else None
+
+
+@app.get("/context/sentiment/{symbol}", response_model=SentimentSnapshot)
+def context_sentiment(symbol: str, provider=Depends(get_sentiment_provider)):
+    if provider is None:
+        raise HTTPException(status_code=503, detail="FINNHUB_API_KEY not configured")
+    return provider.fetch_sentiment(symbol.upper())
 
 
 from pydantic import BaseModel as _BaseModel
@@ -164,6 +178,21 @@ def discover(providers=Depends(get_discover_providers)):
     if not (result.hot or result.penny or result.shine):
         raise HTTPException(status_code=503, detail="screener returned no data (rate-limited or no key)")
     return result
+
+
+from app.predictors.statistical import forecast as statistical_forecast
+from app.models import StatPrediction
+
+@app.get("/predict/statistical/{symbol}", response_model=StatPrediction)
+def predict_statistical(symbol: str, mode: str = "intraday", md: MarketData = Depends(get_market_data)):
+    symbol = symbol.upper()
+    if mode == "outlook":
+        df = md.fetch_candles(symbol, interval="1d", range_="2y")
+    else:
+        df = md.fetch_candles(symbol, interval="5m", range_="1d")
+    if df.empty or len(df) < 11:
+        raise HTTPException(status_code=422, detail="insufficient history for statistical forecast")
+    return statistical_forecast(symbol, df, mode=mode)
 
 
 from app.predictors.setups import scan_setups

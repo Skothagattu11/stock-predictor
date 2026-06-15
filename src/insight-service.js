@@ -31,7 +31,18 @@ function createInsightService({ predictService, router }) {
       models = raw.filter((r) => r.ok).map((r) => ({ name: r.name, ...r.result }));
     }
 
-    const votes = [quantVote, ...models.map((m) => ({ name: m.name, stance: m.stance, confidence: m.confidence }))];
+    // statistical voice (independent, non-LLM) — optional
+    let statVote = null;
+    if (typeof predictService.statistical === 'function') {
+      try {
+        const stat = await predictService.statistical(symbol, mode);
+        if (stat && stat.stance) statVote = { name: 'statistical', stance: stat.stance, confidence: stat.confidence };
+      } catch (e) { /* skip voice */ }
+    }
+
+    const votes = [quantVote,
+      ...(statVote ? [statVote] : []),
+      ...models.map((m) => ({ name: m.name, stance: m.stance, confidence: m.confidence }))];
     return { mode, symbol, quant, models, consensus: buildConsensus(votes) };
   }
   return { insight };

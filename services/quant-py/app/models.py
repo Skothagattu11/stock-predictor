@@ -141,3 +141,13 @@ class PortfolioAssessment(BaseModel):
     flags: list[str]
     as_of: str
     source: Literal["quant"] = "quant"
+
+
+class StatPrediction(BaseModel):
+    symbol: str
+    mode: str
+    stance: Literal["bullish", "neutral", "bearish"]
+    confidence: float = Field(ge=0.0, le=1.0)
+    method: str = "ewma_returns"
+    as_of: str
+    source: Literal["statistical"] = "statistical"
