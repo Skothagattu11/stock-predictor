@@ -31,6 +31,7 @@ function createPredictRouter({ service }) {
   router.post('/portfolio', wrap((req) => service.portfolio(req.body.holdings || [])));
   router.get('/setups/:symbol', wrap((req) => service.setups(req.params.symbol.toUpperCase(), req.query.interval)));
   router.get('/discover', wrap(() => service.discover()));
+  router.get('/calibration/stats', wrap(() => service.calibrationStats()));
 
   return router;
 }

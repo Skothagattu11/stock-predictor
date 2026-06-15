@@ -46,6 +46,7 @@ function createSidecar({ baseUrl = (process.env.QUANT_SIDECAR_URL || ''), fetchI
     setups: (s, interval) => request('GET', `/predict/setups/${encodeURIComponent(s)}?interval=${encodeURIComponent(interval || '1m')}`),
     discover: () => request('GET', '/discover'),
     statistical: (s, mode) => request('GET', `/predict/statistical/${encodeURIComponent(s)}?mode=${encodeURIComponent(mode)}`),
+    calibrationStats: () => request('GET', '/calibration/stats'),
   };
 }
 
