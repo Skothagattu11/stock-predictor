@@ -8,3 +8,4 @@ def _env(key: str) -> str:
 FRED_API_KEY = _env("FRED_API_KEY")
 FMP_API_KEY = _env("FMP_API_KEY")
 FINNHUB_API_KEY = _env("FINNHUB_API_KEY")
+DATA_DIR = (os.environ.get("DATA_DIR", "").strip() or os.path.join(os.getcwd(), "data"))

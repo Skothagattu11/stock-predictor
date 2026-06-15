@@ -197,6 +197,12 @@ def predict_statistical(symbol: str, mode: str = "intraday", md: MarketData = De
 
 from app.predictors.setups import scan_setups
 from app.models import SetupTimeline
+from app.store.calibration import CalibrationStore
+from app.store.history import HistoryStore
+import os as _os
+
+_calib = CalibrationStore(_os.path.join(config.DATA_DIR, "calibration.db"))
+_history = HistoryStore(config.DATA_DIR)
 
 
 def _prior_day_hilo(md: MarketData, symbol: str):
@@ -216,8 +222,27 @@ def predict_setups(symbol: str, interval: str = "1m", md: MarketData = Depends(g
     if df.empty or len(df) < 20:
         raise HTTPException(status_code=422, detail="insufficient candles for setup scan")
     pdh, pdl = _prior_day_hilo(md, sym)
-    return scan_setups(sym, df, daily_atr=_daily_atr(md, sym), prior_day_high=pdh, prior_day_low=pdl,
-                       interval_minutes=_INTERVAL_MINUTES.get(interval, 1))
+    try:
+        _history.append(sym, df)
+    except Exception:
+        pass
+    result = scan_setups(sym, df, daily_atr=_daily_atr(md, sym), prior_day_high=pdh, prior_day_low=pdl,
+                         interval_minutes=_INTERVAL_MINUTES.get(interval, 1))
+    try:
+        _calib.record_setups(sym, [s.model_dump() for s in result.setups])
+    except Exception:
+        pass
+    return result
+
+
+@app.get("/calibration/stats")
+def calibration_stats():
+    return _calib.stats()
+
+
+@app.get("/history/{symbol}/info")
+def history_info(symbol: str):
+    return _history.info(symbol.upper())
 
 
 class PortfolioRequest(_BaseModel):

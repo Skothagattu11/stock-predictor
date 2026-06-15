@@ -228,26 +228,47 @@
     return { groups: Object.keys(groups).map(function (k) { return groups[k]; }), overall: overall };
   }
 
-  function renderTrack() {
-    var node = el('predTrack'); if (!node) return;
-    var st = trackStats(), o = st.overall;
-    var head = '<div class="pcard-head"><span class="phbadge">Setup track record</span>' +
+  function _localStats() {
+    var raw = trackStats();
+    function norm(g) {
+      var res = g.win + g.loss;
+      return { type: g.type, n: g.n, win: g.win, loss: g.loss, pending: g.pending,
+               hit_rate: res ? Math.round(g.win / res * 100) / 100 : null,
+               avg_rr: g.n ? Math.round((g.rrSum / g.n) * 10) / 10 : null };
+    }
+    return { groups: raw.groups.map(norm), overall: norm(raw.overall) };
+  }
+
+  function renderTrackFrom(node, st, durable) {
+    var o = st.overall;
+    var src = durable ? '· durable' : '· this browser';
+    var head = '<div class="pcard-head"><span class="phbadge">Setup track record <span class="pmuted" style="font-weight:normal;font-size:0.82em">' + src + '</span></span>' +
       (o.n ? '<button class="pt-clear" id="ptClear">Clear</button>' : '') + '</div>';
     if (!o.n) {
       node.innerHTML = head + '<div class="pmuted">No setups logged yet. As windows appear they\'re recorded here and marked hit / stopped, so you can see whether the predicted R:R is actually met.</div>';
       return;
     }
-    function rate(w, l) { var r = w + l; return r ? Math.round(w / r * 100) + '%' : '—'; }
+    function rate(hr) { return hr != null ? Math.round(hr * 100) + '%' : '—'; }
     function rowH(g, cls) {
       return '<div class="ptrow ' + (cls || '') + '"><span>' + esc(g.type) + '</span><span>' + g.n +
         '</span><span class="d-up">' + g.win + '</span><span class="d-dn">' + g.loss + '</span><span>' + g.pending +
-        '</span><span><b>' + rate(g.win, g.loss) + '</b></span><span>' + (g.n ? (g.rrSum / g.n).toFixed(1) : '—') + '×</span></div>';
+        '</span><span><b>' + rate(g.hit_rate) + '</b></span><span>' + (g.avg_rr != null ? g.avg_rr.toFixed(1) : '—') + '×</span></div>';
     }
-    var rows = st.groups.sort(function (a, b) { return b.n - a.n; }).map(function (g) { return rowH(g); }).join('');
+    var rows = st.groups.slice().sort(function (a, b) { return b.n - a.n; }).map(function (g) { return rowH(g); }).join('');
     node.innerHTML = head +
       '<div class="pmuted" style="margin-bottom:8px">Was the predicted reward:risk met? (target hit ✓ vs stopped ✗)</div>' +
       '<div class="ptrow ptrow-h"><span>Setup</span><span>#</span><span>✓</span><span>✗</span><span>pend</span><span>R:R met</span><span>avg R:R</span></div>' +
       rows + rowH(o, 'ptotal');
+  }
+
+  function renderTrack() {
+    var node = el('predTrack'); if (!node) return;
+    fetch('/api/predict/calibration/stats').then(function (r) {
+      if (!r.ok) throw new Error('no'); return r.json();
+    }).then(function (st) {
+      if (st && st.overall && st.overall.n > 0) renderTrackFrom(node, st, true);
+      else renderTrackFrom(node, _localStats(), false);
+    }).catch(function () { renderTrackFrom(node, _localStats(), false); });
   }
 
   // ---- Intraday Windows panel ----------------------------------------------

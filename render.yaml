@@ -34,7 +34,13 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     autoDeploy: true
+    disk:
+      name: quant-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
+      - key: DATA_DIR
+        value: /data
       - key: FRED_API_KEY
         sync: false
       - key: FMP_API_KEY
