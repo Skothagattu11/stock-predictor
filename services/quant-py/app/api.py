@@ -155,9 +155,23 @@ def predict_position(symbol: str, cost_basis: float, current_price: float | None
     price = current_price if current_price is not None else _live_price(md, sym)
     if price is None:
         price = cost_basis
-    return assess_position(sym, current_price=price, cost_basis=cost_basis,
-                           shares=shares, portfolio_value=portfolio_value,
-                           intraday_bias=intraday_bias, outlook_stance=outlook_stance)
+    result = assess_position(sym, current_price=price, cost_basis=cost_basis,
+                             shares=shares, portfolio_value=portfolio_value,
+                             intraday_bias=intraday_bias, outlook_stance=outlook_stance)
+    # Attach an exit plan (scale-out + trail) anchored to live key levels (best-effort).
+    try:
+        from app.predictors.setups import _key_levels
+        from app.predictors.exit_plan import build_exit_plan
+        df1 = md.fetch_candles(sym, interval="1m", range_="1d")
+        levels = []
+        if not df1.empty:
+            pdh, pdl = _prior_day_hilo(md, sym)
+            levels = _key_levels(df1, float(price), pdh, pdl)
+        result.exit_plan = build_exit_plan(sym, cost_basis, float(price), shares, levels,
+                                           _daily_atr(md, sym), outlook_stance)
+    except Exception:
+        result.exit_plan = None
+    return result
 
 
 from app.data.fmp_market import FmpMarket

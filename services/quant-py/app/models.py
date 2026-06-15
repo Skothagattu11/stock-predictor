@@ -110,6 +110,31 @@ class OutlookPrediction(BaseModel):
     source: Literal["quant"] = "quant"
 
 
+class ExitTarget(BaseModel):
+    label: str               # T1, T2
+    price: float
+    pct_move: float          # from current price
+    sell_portion: float      # 0..1 of the position to sell here
+    shares: float | None = None
+    basis: str               # 'resistance' | 'R-multiple'
+
+
+class ExitStop(BaseModel):
+    price: float
+    pct: float               # distance from current price (negative for a long)
+    basis: str               # 'support' | 'breakeven' | 'atr' | 'atr-trail'
+
+
+class ExitPlan(BaseModel):
+    direction: Literal["long"] = "long"
+    in_profit: bool
+    stop: ExitStop
+    targets: list[ExitTarget]
+    trail_remainder: float   # portion left to trail after the targets
+    trail_note: str
+    rationale: str
+
+
 class PositionPrediction(BaseModel):
     symbol: str
     action: Literal["HOLD", "TRIM", "ADD", "EXIT"]
@@ -117,6 +142,7 @@ class PositionPrediction(BaseModel):
     unrealized_pnl_abs: float
     weight_pct: float | None = None
     drivers: list[Driver]
+    exit_plan: ExitPlan | None = None
     as_of: str
     source: Literal["quant"] = "quant"
 

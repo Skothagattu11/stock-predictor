@@ -154,7 +154,24 @@
       '<span class="ppnl ' + (data.unrealized_pnl_pct >= 0 ? 'd-up' : 'd-dn') + '">' + pct(data.unrealized_pnl_pct) +
       ' (' + money(data.unrealized_pnl_abs) + ')</span></div>' +
       driverPills(data.drivers) +
+      exitPlanView(data.exit_plan) +
       '<div class="pcard-foot">' + aiBadge([]) + '</div>';
+  }
+  function exitPlanView(ep) {
+    if (!ep) return '';
+    var rows = ep.targets.map(function (x) {
+      return '<div class="plvl"><span>' + esc(x.label) + ' · sell ' + Math.round(x.sell_portion * 100) + '%' +
+        (x.shares ? ' (' + x.shares + ' sh)' : '') + (x.basis === 'resistance' ? ' @ resistance' : '') + '</span>' +
+        '<b class="d-up">' + money(x.price) + ' <small class="pmv">(+' + (x.pct_move * 100).toFixed(1) + '%)</small></b></div>';
+    }).join('');
+    return '<div class="plvl-hd">Exit plan · scale out + trail</div>' +
+      '<div class="plevels">' +
+      '<div class="plvl"><span>Protect / stop · ' + esc(ep.stop.basis) + '</span>' +
+      '<b class="d-dn">' + money(ep.stop.price) + ' <small class="pmv">(' + (ep.stop.pct * 100).toFixed(1) + '%)</small></b></div>' +
+      rows +
+      '<div class="plvl"><span>Trail remainder</span><b>' + Math.round(ep.trail_remainder * 100) + '%</b></div>' +
+      '</div>' +
+      '<div class="plvl-out">' + esc(ep.rationale) + '</div>';
   }
   function portfolioCard(node, data) {
     var flags = (data.flags || []).map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('');
