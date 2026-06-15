@@ -15,13 +15,11 @@ services:
       # (Environment tab) — do NOT commit a real key.
       - key: FINNHUB_API_KEY
         sync: false
-      # Auto-wired to the sidecar below. Used by the Node app from Phase 4
-      # onward (sidecar calls); harmless/ignored until then.
+      # Explicit public URL of the sidecar. (fromService:host resolves to an
+      # internal hostname Node can't reach over HTTPS -> "fetch failed", so we
+      # pin the public onrender URL. Update if the sidecar's URL changes.)
       - key: QUANT_SIDECAR_URL
-        fromService:
-          type: web
-          name: quant-py
-          property: host
+        value: https://quant-py.onrender.com
       # Shared secret for the TradingView/Pine alert webhook (/api/tv/webhook).
       # Set a value in the dashboard; include the same "secret" in your alert JSON.
       - key: TV_WEBHOOK_SECRET
