@@ -44,7 +44,7 @@ def predict_intraday(symbol: str, interval: str = "1m",
 
 
 from app import config
-from app.context.models import MacroSnapshot, ImpliedMove, FundamentalsResult
+from app.context.models import MacroSnapshot, ImpliedMove, FundamentalsResult, SentimentSnapshot
 from app.context.crosscheck import merge_fundamentals
 from app.data.base import FundamentalsProvider, MacroProvider, OptionsProvider
 from app.data.fred import FredMacro
@@ -97,6 +97,20 @@ def context_macro(provider: MacroProvider | None = Depends(get_macro_provider)):
 @app.get("/context/implied-move/{symbol}", response_model=ImpliedMove)
 def context_implied_move(symbol: str, provider: OptionsProvider = Depends(get_options_provider)):
     return provider.fetch_implied_move(symbol.upper())
+
+
+from app.data.news_sentiment import NewsSentiment
+
+
+def get_sentiment_provider():
+    return NewsSentiment(api_key=config.FINNHUB_API_KEY) if config.FINNHUB_API_KEY else None
+
+
+@app.get("/context/sentiment/{symbol}", response_model=SentimentSnapshot)
+def context_sentiment(symbol: str, provider=Depends(get_sentiment_provider)):
+    if provider is None:
+        raise HTTPException(status_code=503, detail="FINNHUB_API_KEY not configured")
+    return provider.fetch_sentiment(symbol.upper())
 
 
 from pydantic import BaseModel as _BaseModel

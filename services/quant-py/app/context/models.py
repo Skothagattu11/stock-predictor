@@ -49,3 +49,12 @@ class FieldDiscrepancy(BaseModel):
 class FundamentalsResult(BaseModel):
     merged: Fundamentals
     discrepancies: list[FieldDiscrepancy] = Field(default_factory=list)
+
+
+class SentimentSnapshot(BaseModel):
+    symbol: str
+    score: float            # -1..1
+    label: str              # 'positive' | 'neutral' | 'negative'
+    headline_count: int
+    as_of: str
+    sources: list[str] = Field(default_factory=list)
