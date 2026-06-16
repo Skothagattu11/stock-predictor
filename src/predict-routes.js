@@ -8,7 +8,13 @@ function createPredictRouter({ service }) {
     try {
       res.json(await fn(req));
     } catch (e) {
-      res.status(503).json({ error: 'prediction service unavailable', detail: e.message });
+      // Forward upstream client errors (notably 422 "forming — not enough
+      // session data yet" at market open) so the UI shows the right message
+      // instead of a misleading "sidecar unreachable". Everything else (network
+      // failure, 5xx, unconfigured URL) is a genuine 503.
+      const upstream = e && Number.isInteger(e.status) ? e.status : null;
+      const status = upstream && upstream >= 400 && upstream < 500 ? upstream : 503;
+      res.status(status).json({ error: 'prediction service unavailable', detail: e.message });
     }
   };
 

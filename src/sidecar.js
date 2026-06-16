@@ -17,7 +17,14 @@ function createSidecar({ baseUrl = (process.env.QUANT_SIDECAR_URL || ''), fetchI
         headers: body ? { 'content-type': 'application/json' } : undefined,
         body: body ? JSON.stringify(body) : undefined,
       });
-      if (!res.ok) throw new Error(`sidecar ${path} -> ${res.status}`);
+      if (!res.ok) {
+        // Preserve the upstream status so callers can distinguish a client-side
+        // condition (e.g. 422 "forming — not enough session data yet") from a
+        // genuinely unreachable/erroring sidecar.
+        const err = new Error(`sidecar ${path} -> ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
       return res.json();
     } finally {
       clearTimeout(timer);

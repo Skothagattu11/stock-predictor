@@ -41,6 +41,11 @@ test('non-ok response throws', async () => {
   await assert.rejects(() => s.intraday('AAPL'), /503/);
 });
 
+test('thrown error carries the upstream status code', async () => {
+  const s = createSidecar({ baseUrl: 'http://side', fetchImpl: fakeFetch({}, {}, 422, false) });
+  await assert.rejects(() => s.setups('AAPL'), (e) => e.status === 422);
+});
+
 test('scheme-less baseUrl (Render fromService host) defaults to https', async () => {
   const rec = {};
   const s = createSidecar({ baseUrl: 'quant-py.onrender.com', fetchImpl: fakeFetch(rec, {}) });

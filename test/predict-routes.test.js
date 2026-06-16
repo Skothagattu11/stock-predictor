@@ -38,6 +38,26 @@ test('sidecar failure surfaces as 503', async () => {
   } finally { server.close(); }
 });
 
+test('upstream 422 (forming) is forwarded, not flattened to 503', async () => {
+  const err = new Error('sidecar /predict/setups/AAPL -> 422'); err.status = 422;
+  const service = { setups: async () => { throw err; } };
+  const { server, base } = await listen(appWith(service));
+  try {
+    const r = await fetch(`${base}/api/predict/setups/AAPL`);
+    assert.equal(r.status, 422);   // UI shows "Forming…", not "sidecar unreachable"
+  } finally { server.close(); }
+});
+
+test('upstream 5xx still surfaces as 503', async () => {
+  const err = new Error('sidecar /predict/setups/AAPL -> 500'); err.status = 500;
+  const service = { setups: async () => { throw err; } };
+  const { server, base } = await listen(appWith(service));
+  try {
+    const r = await fetch(`${base}/api/predict/setups/AAPL`);
+    assert.equal(r.status, 503);
+  } finally { server.close(); }
+});
+
 test('POST /api/predict/portfolio passes holdings through', async () => {
   const service = { portfolio: async (h) => ({ count: h.length }) };
   const { server, base } = await listen(appWith(service));
