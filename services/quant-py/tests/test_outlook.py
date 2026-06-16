@@ -39,6 +39,17 @@ def test_scenarios_bracket_base_and_use_volatility():
     bear = next(s for s in o.scenarios if s.case == "bear")
     assert bear.target_price < base.target_price < bull.target_price
 
+def test_bear_case_stays_realistic_even_when_constructive():
+    # a strongly bullish read must still show a meaningful downside (drift is damped),
+    # not a collapsed ~0% bear case.
+    o = score_outlook("AAPL", _daily(np.linspace(100, 220, 300)))
+    assert o.stance == "Constructive"
+    bull = next(s for s in o.scenarios if s.case == "bull").target_return_pct
+    bear = next(s for s in o.scenarios if s.case == "bear").target_return_pct
+    assert bear < 0
+    assert abs(bear) >= 0.3 * abs(bull)   # downside not swamped by the bullish tilt
+
+
 def test_insufficient_history_raises():
     import pytest
     with pytest.raises(ValueError):

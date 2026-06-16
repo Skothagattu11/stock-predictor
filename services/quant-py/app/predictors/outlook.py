@@ -11,6 +11,7 @@ from app.context.models import Fundamentals
 MIN_BARS = 220
 HORIZON_DAYS = 63          # ~3 trading months
 MOM_LOOKBACK = 252         # 12 months
+DRIFT_VOL_FRACTION = 0.4   # cap the conviction tilt so the bear case stays realistic
 MOM_SKIP = 21              # exclude most recent month (12-1 momentum)
 
 
@@ -81,8 +82,12 @@ def score_outlook(symbol: str, daily_df: pd.DataFrame,
     rets = close.pct_change().dropna()
     daily_vol = float(rets.tail(MOM_LOOKBACK).std()) if len(rets) else 0.02
     horizon_vol = daily_vol * math.sqrt(HORIZON_DAYS)
-    drift = (score - 50) / 50.0 * horizon_vol     # tilt the base case by conviction
-    base_ret, bull_ret, bear_ret = drift, drift + horizon_vol, drift - horizon_vol
+    # Tilt the base case by conviction, but DAMPEN it (≤40% of vol) so the bear case
+    # always shows a realistic downside — even a strongly-bullish read can fall.
+    drift = (score - 50) / 50.0 * DRIFT_VOL_FRACTION * horizon_vol
+    base_ret = drift
+    bull_ret = drift + horizon_vol
+    bear_ret = drift - horizon_vol     # with damped drift this stays meaningfully negative
     # probabilities skewed by conviction
     skew = (score - 50) / 50.0 * 0.15
     p_bull = round(0.25 + skew, 4); p_bear = round(0.25 - skew, 4)
