@@ -268,3 +268,65 @@ def predict_portfolio(req: PortfolioRequest):
     if not req.holdings:
         raise HTTPException(status_code=422, detail="no holdings provided")
     return assess_portfolio(req.holdings)
+
+
+from concurrent.futures import ThreadPoolExecutor
+from app.predictors.opportunities import score_opportunity, tier_config, TOP_N
+from app.models import OpportunitiesResult, OpportunityPick
+from datetime import datetime, timezone
+
+
+def _pe_for(md: MarketData, symbol: str) -> float | None:
+    """Best-effort PE via the configured fundamentals providers (None on failure)."""
+    try:
+        providers = get_fundamentals_providers()
+        for p in providers:
+            f = p.fetch(symbol)
+            if f and f.pe:
+                return float(f.pe)
+    except Exception:
+        pass
+    return None
+
+
+@app.get("/opportunities", response_model=OpportunitiesResult)
+def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "balanced",
+                  md: MarketData = Depends(get_market_data),
+                  providers=Depends(get_discover_providers)):
+    fmp, yahoo = providers
+    if fmp is None and yahoo is None:
+        raise HTTPException(status_code=503, detail="no screener provider configured")
+    threshold, lanes = tier_config(risk)
+    disc = build_discover(fmp, yahoo=yahoo)
+    seen, candidates = set(), []
+    for lane in lanes:
+        for item in getattr(disc, lane, []):
+            if item.symbol not in seen:
+                seen.add(item.symbol); candidates.append(item.symbol)
+
+    def _score(sym):
+        try:
+            idf = md.fetch_candles(sym, interval="1m", range_="1d")
+            ddf = md.fetch_candles(sym, interval="1d", range_="2y")
+            if ddf.empty:
+                return None
+            return score_opportunity(sym, idf, ddf, pe=_pe_for(md, sym),
+                                     daily_atr=_daily_atr(md, sym),
+                                     budget=budget, target=target, threshold=threshold)
+        except Exception:
+            return None
+
+    picks = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for res in ex.map(_score, candidates):
+            if res:
+                picks.append(res)
+    picks.sort(key=lambda p: (p["probability"], p["reward_risk"]), reverse=True)
+    picks = picks[:TOP_N]
+    # (Durable hit/miss tracking for opportunities is a follow-up: the existing
+    # calibration store is setup-shaped, so recording these picks needs a new
+    # store method — deliberately out of scope for Phase A.)
+    return OpportunitiesResult(
+        budget=budget, target=target, risk=risk,
+        picks=[OpportunityPick(**p) for p in picks], scanned=len(candidates),
+        as_of=datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
