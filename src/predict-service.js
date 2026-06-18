@@ -11,6 +11,7 @@ const TTL = {
   discover: 10 * 60 * 1000,        // 10 min
   statistical: 120 * 1000,          // 2 min
   calibrationStats: 60 * 1000,      // 1 min
+  opportunities: 60 * 1000,          // 1 min (market hours)
 };
 
 function createPredictService({ sidecar, cache }) {
@@ -27,6 +28,9 @@ function createPredictService({ sidecar, cache }) {
     discover: () => cached('discover', 'ALL', () => sidecar.discover()),
     statistical: (s, mode) => cached('statistical', `${s}:${mode}`, () => sidecar.statistical(s, mode)),
     calibrationStats: () => cached('calibrationStats', 'ALL', () => sidecar.calibrationStats()),
+    opportunities: (budget, target, risk) =>
+      cached('opportunities', `${budget}:${target}:${risk || 'balanced'}`,
+        () => sidecar.opportunities(budget, target, risk)),
   };
 }
 
