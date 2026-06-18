@@ -326,7 +326,12 @@ def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "bala
         for res in ex.map(_score, candidates):
             if res:
                 picks.append(res)
-    picks.sort(key=lambda p: (p["probability"], p["reward_risk"]), reverse=True)
+    # Rank by expected value (prob*reward - (1-prob)*risk), not raw probability,
+    # so high-probability picks that risk far more than the target sink below
+    # genuinely profitable ones. Tie-break by reward:risk.
+    def _ev(p):
+        return p["probability"] * p["target_dollars"] - (1 - p["probability"]) * p["risk_dollars"]
+    picks.sort(key=lambda p: (_ev(p), p["reward_risk"]), reverse=True)
     picks = picks[:TOP_N]
     # (Durable hit/miss tracking for opportunities is a follow-up: the existing
     # calibration store is setup-shaped, so recording these picks needs a new

@@ -7,8 +7,8 @@ import pandas as pd
 HORIZONS = [("intraday", 1), ("swing", 5), ("position", 21)]
 RISK_TIERS = {
     "cautious":   (0.65, ("hot", "shine")),
-    "balanced":   (0.55, ("hot", "shine", "penny")),
-    "aggressive": (0.45, ("hot", "shine", "penny")),
+    "balanced":   (0.55, ("hot", "shine")),            # established/mover names; no penny
+    "aggressive": (0.45, ("hot", "shine", "penny")),   # penny/movers only when aggressive
 }
 DRIFT_FRACTION = 0.5
 STOP_VOL_MULT = 1.0

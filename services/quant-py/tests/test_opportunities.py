@@ -41,6 +41,8 @@ def test_pe_tag_buckets():
 def test_tier_config_maps_risk():
     thr, lanes = tier_config("cautious")
     assert thr == 0.65 and "penny" not in lanes
+    thr_b, lanes_b = tier_config("balanced")
+    assert thr_b == 0.55 and "penny" not in lanes_b   # penny is aggressive-only
     thr2, lanes2 = tier_config("aggressive")
     assert thr2 == 0.45 and "penny" in lanes2
     assert tier_config("unknown")[0] == 0.55   # defaults to balanced
