@@ -177,3 +177,34 @@ class StatPrediction(BaseModel):
     method: str = "ewma_returns"
     as_of: str
     source: Literal["statistical"] = "statistical"
+
+
+class OpportunityPick(BaseModel):
+    symbol: str
+    price: float
+    pe: float | None = None
+    pe_tag: str                       # 'cheap' | 'fair' | 'rich' | 'n/a'
+    shares: int
+    invested: float
+    required_move_pct: float
+    horizon: Literal["intraday", "swing", "position"]
+    horizon_days: int
+    probability: float = Field(ge=0.0, le=1.0)
+    entry_low: float
+    entry_high: float
+    entry_status: Literal["buy_now", "wait"]
+    target_dollars: float
+    risk_dollars: float
+    reward_risk: float
+    conviction: float = Field(ge=0.0, le=1.0)
+    voices_agree: list[str] = []
+    as_of: str
+
+
+class OpportunitiesResult(BaseModel):
+    budget: float
+    target: float
+    risk: str
+    picks: list[OpportunityPick]
+    scanned: int
+    as_of: str

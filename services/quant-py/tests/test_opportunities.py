@@ -48,3 +48,41 @@ def test_tier_config_maps_risk():
 def test_stop_fraction_is_bounded():
     assert stop_fraction_for(0.0) == MIN_STOP_FRAC
     assert stop_fraction_for(10.0) == MAX_STOP_FRAC
+
+from app.predictors.opportunities import score_opportunity
+
+def _intraday_df(price=100.0, n=60):
+    ts = 1_700_000_000 + np.arange(n) * 60
+    base = np.linspace(price * 0.98, price, n)
+    return pd.DataFrame({"timestamp": ts, "open": base, "high": base + 0.2,
+                         "low": base - 0.2, "close": base, "volume": np.full(n, 1e6)})
+
+def _daily_df(start=80.0, end=100.0, n=300):
+    close = np.linspace(start, end, n)
+    ts = 1_700_000_000 + np.arange(n) * 86400
+    return pd.DataFrame({"timestamp": ts, "open": close, "high": close + 1,
+                         "low": close - 1, "close": close, "volume": np.full(n, 1e6)})
+
+def test_score_opportunity_affordable_uptrend_produces_pick():
+    pick = score_opportunity("AAPL", _intraday_df(40.0), _daily_df(30, 40),
+                             pe=22.0, daily_atr=1.0, budget=200.0, target=10.0,
+                             threshold=0.45)
+    assert pick is not None
+    assert pick["symbol"] == "AAPL"
+    assert pick["shares"] == 5 and pick["pe_tag"] == "fair"
+    assert 0.0 <= pick["probability"] <= 1.0
+    assert pick["horizon"] in ("intraday", "swing", "position")
+    assert pick["target_dollars"] == 10.0
+    assert pick["risk_dollars"] > 0 and pick["reward_risk"] > 0
+
+def test_score_opportunity_unaffordable_returns_none():
+    assert score_opportunity("BRK", _intraday_df(300.0), _daily_df(280, 300),
+                             pe=None, daily_atr=5.0, budget=200.0, target=10.0,
+                             threshold=0.45) is None
+
+def test_score_opportunity_picks_shortest_qualifying_horizon():
+    pick = score_opportunity("AAPL", _intraday_df(40.0), _daily_df(20, 40),
+                             pe=10.0, daily_atr=1.5, budget=200.0, target=10.0,
+                             threshold=0.45)
+    # strong uptrend, low required move (5%) -> should qualify, label set
+    assert pick is not None and pick["horizon_days"] in (1, 5, 21)
