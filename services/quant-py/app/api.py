@@ -281,7 +281,7 @@ def _pe_for(md: MarketData, symbol: str) -> float | None:
     try:
         providers = get_fundamentals_providers()
         for p in providers:
-            f = p.fetch(symbol)
+            f = p.fetch_fundamentals(symbol)
             if f and f.pe:
                 return float(f.pe)
     except Exception:
@@ -303,6 +303,8 @@ def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "bala
         for item in getattr(disc, lane, []):
             if item.symbol not in seen:
                 seen.add(item.symbol); candidates.append(item.symbol)
+    if not candidates:
+        raise HTTPException(status_code=503, detail="screener returned no candidates")
 
     def _score(sym):
         try:
@@ -310,8 +312,11 @@ def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "bala
             ddf = md.fetch_candles(sym, interval="1d", range_="2y")
             if ddf.empty:
                 return None
+            # ATR from the daily bars we already fetched (avoids a 3rd fetch/symbol).
+            datr = (float(ind.atr(ddf["high"], ddf["low"], ddf["close"], 14).iloc[-1])
+                    if len(ddf) >= 15 else None)
             return score_opportunity(sym, idf, ddf, pe=_pe_for(md, sym),
-                                     daily_atr=_daily_atr(md, sym),
+                                     daily_atr=datr,
                                      budget=budget, target=target, threshold=threshold)
         except Exception:
             return None

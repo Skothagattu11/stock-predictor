@@ -45,3 +45,14 @@ def test_opportunities_empty_universe_is_503():
         assert r.status_code == 503
     finally:
         app.dependency_overrides.clear()
+
+def test_opportunities_empty_lanes_is_503(monkeypatch):
+    # providers exist but the screener returns nothing (e.g. blocked/rate-limited)
+    app.dependency_overrides[get_discover_providers] = lambda: (None, object())
+    monkeypatch.setattr(api, "build_discover",
+        lambda *a, **k: DiscoverResult(hot=[], penny=[], shine=[], sources=["test"], as_of="t"))
+    try:
+        r = TestClient(app).get("/opportunities")
+        assert r.status_code == 503
+    finally:
+        app.dependency_overrides.clear()
