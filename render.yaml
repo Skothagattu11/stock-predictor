@@ -30,6 +30,16 @@ services:
         sync: false
       - key: ALERT_FROM_EMAIL
         sync: false
+      # LLM ensemble voices (4-model consensus). Set each key in the Render
+      # dashboard (Environment tab) — do NOT commit real keys.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PERPLEXITY_API_KEY
+        sync: false
 
   # Python quant/ML sidecar (FastAPI). Built from its own Dockerfile.
   # plan: starter (paid) avoids sleep/cold-starts and gives more RAM than free —
