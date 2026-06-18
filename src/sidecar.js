@@ -54,6 +54,9 @@ function createSidecar({ baseUrl = (process.env.QUANT_SIDECAR_URL || ''), fetchI
     discover: () => request('GET', '/discover'),
     statistical: (s, mode) => request('GET', `/predict/statistical/${encodeURIComponent(s)}?mode=${encodeURIComponent(mode)}`),
     calibrationStats: () => request('GET', '/calibration/stats'),
+    opportunities: (budget, target, risk) =>
+      request('GET', `/opportunities?budget=${encodeURIComponent(budget)}` +
+        `&target=${encodeURIComponent(target)}&risk=${encodeURIComponent(risk || 'balanced')}`),
   };
 }
 

@@ -52,3 +52,13 @@ test('scheme-less baseUrl (Render fromService host) defaults to https', async ()
   await s.intraday('AAPL');
   assert.equal(rec.url, 'https://quant-py.onrender.com/predict/intraday/AAPL');
 });
+
+test('opportunities builds a query string from budget/target/risk', async () => {
+  const rec = {};
+  const s = createSidecar({ baseUrl: 'http://side', fetchImpl: fakeFetch(rec, { picks: [] }) });
+  await s.opportunities(200, 10, 'aggressive');
+  assert.ok(rec.url.startsWith('http://side/opportunities?'));
+  assert.ok(rec.url.includes('budget=200'));
+  assert.ok(rec.url.includes('target=10'));
+  assert.ok(rec.url.includes('risk=aggressive'));
+});

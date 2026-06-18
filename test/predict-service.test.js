@@ -49,3 +49,12 @@ test('discover is cached', async () => {
   await svc.discover(); await svc.discover();
   assert.equal(counts.d, 1);
 });
+
+test('opportunities is cached by budget:target:risk', async () => {
+  const counts = {};
+  const sidecar = { opportunities: async () => (counts.o = (counts.o || 0) + 1, { picks: [] }) };
+  const svc = createPredictService({ sidecar, cache: new TtlCache() });
+  await svc.opportunities(200, 10, 'balanced');
+  await svc.opportunities(200, 10, 'balanced');
+  assert.equal(counts.o, 1);   // second call served from cache
+});

@@ -69,3 +69,14 @@ test('POST /api/predict/portfolio passes holdings through', async () => {
     assert.equal((await r.json()).count, 1);
   } finally { server.close(); }
 });
+
+test('GET /api/predict/opportunities passes params and returns json', async () => {
+  const service = { opportunities: async (b, t, r) => ({ budget: b, target: t, risk: r, picks: [] }) };
+  const { server, base } = await listen(appWith(service));
+  try {
+    const r = await fetch(`${base}/api/predict/opportunities?budget=200&target=10&risk=aggressive`);
+    assert.equal(r.status, 200);
+    const body = await r.json();
+    assert.equal(body.budget, 200); assert.equal(body.risk, 'aggressive');
+  } finally { server.close(); }
+});

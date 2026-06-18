@@ -79,6 +79,24 @@
   }
   function noteCtx(symbol, pos) { lastCtx = { symbol: symbol, pos: pos }; }
 
+  // Fire a one-time browser notification when a Goal-Planner pick is in its buy zone.
+  var _oppNotified = {};   // symbol -> true (per session)
+  function watchOpportunities(picks) {
+    if (!('Notification' in window)) return;
+    (picks || []).forEach(function (p) {
+      if (p.entry_status === 'buy_now' && !_oppNotified[p.symbol]) {
+        _oppNotified[p.symbol] = true;
+        if (Notification.permission === 'granted') {
+          new Notification('Buy-now: ' + p.symbol,
+            { body: 'In buy zone $' + p.entry_low + '–$' + p.entry_high +
+                    ' · need +' + (p.required_move_pct * 100).toFixed(1) + '% for $' + p.target_dollars });
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission();
+        }
+      }
+    });
+  }
+
   function refreshBtn() {
     var b = document.getElementById('alertsToggle');
     if (b) {
@@ -108,5 +126,6 @@
     }
   });
   refreshBtn();
-  window.Alerts = { enable: enable, check: check, isOn: isOn, syncEmail: syncEmail, noteCtx: noteCtx };
+  window.Alerts = { enable: enable, check: check, isOn: isOn, syncEmail: syncEmail, noteCtx: noteCtx,
+    watchOpportunities: watchOpportunities };
 })();

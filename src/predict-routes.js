@@ -38,6 +38,11 @@ function createPredictRouter({ service }) {
   router.get('/setups/:symbol', wrap((req) => service.setups(req.params.symbol.toUpperCase(), req.query.interval)));
   router.get('/discover', wrap(() => service.discover()));
   router.get('/calibration/stats', wrap(() => service.calibrationStats()));
+  router.get('/opportunities', wrap((req) => {
+    const q = req.query;
+    const num = (v, d) => (v === undefined ? d : Number(v));
+    return service.opportunities(num(q.budget, 150), num(q.target, 12), q.risk || 'balanced');
+  }));
 
   return router;
 }
