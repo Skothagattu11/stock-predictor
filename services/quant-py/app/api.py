@@ -16,7 +16,28 @@ def _daily_atr(md: MarketData, symbol: str) -> float | None:
     except Exception:
         return None
 
-app = FastAPI(title="quant-py", version="0.1.0")
+import asyncio
+from contextlib import asynccontextmanager
+
+PAPER_TICK_SECONDS = 60
+
+
+@asynccontextmanager
+async def lifespan(app):
+    async def _loop():
+        while True:
+            await asyncio.sleep(PAPER_TICK_SECONDS)
+            try:
+                await asyncio.to_thread(paper_tick, YahooMarketData())
+            except Exception:
+                pass
+    task = asyncio.create_task(_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+
+app = FastAPI(title="quant-py", version="0.1.0", lifespan=lifespan)
 
 _INTERVAL_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "60m": 60, "1h": 60}
 
@@ -218,6 +239,148 @@ import os as _os
 _calib = CalibrationStore(_os.path.join(config.DATA_DIR, "calibration.db"))
 _history = HistoryStore(config.DATA_DIR)
 
+from app.store.paper import PaperStore
+from app.paper.engine import open_order, evaluate_exit, mark_to_market, portfolio_stats
+from pydantic import BaseModel
+
+_paper = PaperStore(_os.path.join(config.DATA_DIR, "paper.db"))
+
+
+class PaperOrder(BaseModel):
+    symbol: str
+    budget: float = 200.0
+    target: float | None = None
+    stop: float | None = None
+
+
+class PaperSettingsBody(BaseModel):
+    auto_enabled: bool = False
+    budget: float = 200.0
+    target: float = 12.0
+    risk: str = "balanced"
+
+
+def _portfolio_payload(md) -> dict:
+    acct = _paper.get_account()
+    open_rows = _paper.list_positions(status="open")
+    equity = acct["cash"]
+    marked = []
+    for p in open_rows:
+        lp = _live_price(md, p["symbol"]) or p["entry"]
+        m = mark_to_market(p, lp)
+        equity += m["market_value"]
+        marked.append({**p, **m})
+    closed = _paper.list_positions(status="closed")
+    return {"account": {**acct, "equity": round(equity, 2)},
+            "open": marked, "stats": portfolio_stats(closed, acct["starting"])}
+
+
+@app.post("/paper/order")
+def paper_order(body: PaperOrder, md: MarketData = Depends(get_market_data)):
+    sym = body.symbol.upper()
+    price = _live_price(md, sym)
+    o = open_order(_paper.get_account()["cash"], sym, price, body.budget, body.target, body.stop)
+    if "error" in o:
+        raise HTTPException(status_code=400, detail=o["error"])
+    pid, err = _paper.try_open_position(sym, o["shares"], o["entry"], body.target, body.stop, o["cost"], "manual")
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    return {"id": pid, **o}
+
+
+@app.post("/paper/close/{pid}")
+def paper_close(pid: str, md: MarketData = Depends(get_market_data)):
+    pos = next((p for p in _paper.list_positions(status="open") if p["id"] == pid), None)
+    if pos is None:
+        raise HTTPException(status_code=404, detail="no open position " + pid)
+    price = _live_price(md, pos["symbol"]) or pos["entry"]
+    _paper.close_position(pid, exit_price=price, exit_reason="manual")
+    return {"id": pid, "exit_price": price, "exit_reason": "manual"}
+
+
+@app.get("/paper/portfolio")
+def paper_portfolio(md: MarketData = Depends(get_market_data)):
+    return _portfolio_payload(md)
+
+
+@app.get("/paper/history")
+def paper_history():
+    closed = _paper.list_positions(status="closed")
+    return {"closed": closed, "stats": portfolio_stats(closed, _paper.get_account()["starting"])}
+
+
+@app.get("/paper/settings")
+def paper_settings():
+    return _paper.get_settings()
+
+
+@app.post("/paper/settings")
+def paper_set_settings(body: PaperSettingsBody):
+    _paper.set_settings(body.auto_enabled, body.budget, body.target, body.risk)
+    return _paper.get_settings()
+
+
+@app.post("/paper/reset")
+def paper_reset():
+    _paper.reset()
+    return _paper.get_account()
+
+
+def _bars_since(df, opened_at_iso) -> list[dict]:
+    """Today's 1-min bars at/after the position's open time, oldest first."""
+    if df is None or df.empty:
+        return []
+    import calendar, time
+    try:
+        t = time.strptime(opened_at_iso, "%Y-%m-%dT%H:%M:%SZ")
+        epoch = calendar.timegm(t)
+    except Exception:
+        epoch = 0
+    out = []
+    for _, row in df.iterrows():
+        if int(row["timestamp"]) >= epoch:
+            out.append({"high": float(row["high"]), "low": float(row["low"])})
+    return out
+
+
+def paper_tick(md):
+    """One mark/exit + auto-take pass. Best-effort: never raises."""
+    # 1. exits
+    for p in _paper.list_positions(status="open"):
+        if p["target"] is None and p["stop"] is None:
+            continue
+        try:
+            df = md.fetch_candles(p["symbol"], interval="1m", range_="1d")
+        except Exception:
+            continue
+        ex = evaluate_exit(p, _bars_since(df, p["opened_at"]))
+        if ex:
+            _paper.close_position(p["id"], exit_price=ex[1], exit_reason=ex[0])
+    # 2. auto-take
+    s = _paper.get_settings()
+    if not s.get("auto_enabled"):
+        return
+    try:
+        picks = scan_opportunities(md, get_discover_providers(), s["budget"], s["target"], s["risk"])
+    except Exception:
+        return
+    held = {p["symbol"] for p in _paper.list_positions(status="open")}
+    for pick in picks:
+        sym = pick["symbol"]
+        if sym in held:
+            continue
+        entry = pick["price"]
+        target = round(entry * (1 + pick["required_move_pct"]), 4)
+        stop_frac = pick["risk_dollars"] / pick["invested"] if pick["invested"] else 0.0
+        stop = round(entry * (1 - stop_frac), 4)
+        o = open_order(_paper.get_account()["cash"], sym, entry, s["budget"], target, stop)
+        if "error" in o:
+            continue
+        pid, err = _paper.try_open_position(sym, o["shares"], o["entry"], target, stop, o["cost"], "auto")
+        if err:
+            continue
+        held.add(sym)
+
 
 def _prior_day_hilo(md: MarketData, symbol: str):
     try:
@@ -289,13 +452,11 @@ def _pe_for(md: MarketData, symbol: str) -> float | None:
     return None
 
 
-@app.get("/opportunities", response_model=OpportunitiesResult)
-def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "balanced",
-                  md: MarketData = Depends(get_market_data),
-                  providers=Depends(get_discover_providers)):
+def scan_opportunities(md, providers, budget: float, target: float, risk: str) -> list[dict]:
+    """Build the candidate universe (lane-filtered by risk) and score each into an
+    OpportunityPick dict, ranked by expected value. Shared by the endpoint and the
+    paper auto-tick."""
     fmp, yahoo = providers
-    if fmp is None and yahoo is None:
-        raise HTTPException(status_code=503, detail="no screener provider configured")
     threshold, lanes = tier_config(risk)
     disc = build_discover(fmp, yahoo=yahoo)
     seen, candidates = set(), []
@@ -303,8 +464,6 @@ def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "bala
         for item in getattr(disc, lane, []):
             if item.symbol not in seen:
                 seen.add(item.symbol); candidates.append(item.symbol)
-    if not candidates:
-        raise HTTPException(status_code=503, detail="screener returned no candidates")
 
     def _score(sym):
         try:
@@ -312,11 +471,9 @@ def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "bala
             ddf = md.fetch_candles(sym, interval="1d", range_="2y")
             if ddf.empty:
                 return None
-            # ATR from the daily bars we already fetched (avoids a 3rd fetch/symbol).
             datr = (float(ind.atr(ddf["high"], ddf["low"], ddf["close"], 14).iloc[-1])
                     if len(ddf) >= 15 else None)
-            return score_opportunity(sym, idf, ddf, pe=_pe_for(md, sym),
-                                     daily_atr=datr,
+            return score_opportunity(sym, idf, ddf, pe=_pe_for(md, sym), daily_atr=datr,
                                      budget=budget, target=target, threshold=threshold)
         except Exception:
             return None
@@ -326,17 +483,25 @@ def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "bala
         for res in ex.map(_score, candidates):
             if res:
                 picks.append(res)
-    # Rank by expected value (prob*reward - (1-prob)*risk), not raw probability,
-    # so high-probability picks that risk far more than the target sink below
-    # genuinely profitable ones. Tie-break by reward:risk.
     def _ev(p):
         return p["probability"] * p["target_dollars"] - (1 - p["probability"]) * p["risk_dollars"]
     picks.sort(key=lambda p: (_ev(p), p["reward_risk"]), reverse=True)
-    picks = picks[:TOP_N]
-    # (Durable hit/miss tracking for opportunities is a follow-up: the existing
-    # calibration store is setup-shaped, so recording these picks needs a new
-    # store method — deliberately out of scope for Phase A.)
+    return picks
+
+
+@app.get("/opportunities", response_model=OpportunitiesResult)
+def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "balanced",
+                  md: MarketData = Depends(get_market_data),
+                  providers=Depends(get_discover_providers)):
+    fmp, yahoo = providers
+    if fmp is None and yahoo is None:
+        raise HTTPException(status_code=503, detail="no screener provider configured")
+    _, lanes = tier_config(risk)
+    disc = build_discover(fmp, yahoo=yahoo)
+    if not any(getattr(disc, lane, []) for lane in lanes):
+        raise HTTPException(status_code=503, detail="screener returned no candidates")
+    picks = scan_opportunities(md, providers, budget, target, risk)[:TOP_N]
     return OpportunitiesResult(
         budget=budget, target=target, risk=risk,
-        picks=[OpportunityPick(**p) for p in picks], scanned=len(candidates),
+        picks=[OpportunityPick(**p) for p in picks], scanned=len(picks),
         as_of=datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
