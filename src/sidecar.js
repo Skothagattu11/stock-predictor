@@ -57,6 +57,13 @@ function createSidecar({ baseUrl = (process.env.QUANT_SIDECAR_URL || ''), fetchI
     opportunities: (budget, target, risk) =>
       request('GET', `/opportunities?budget=${encodeURIComponent(budget)}` +
         `&target=${encodeURIComponent(target)}&risk=${encodeURIComponent(risk || 'balanced')}`),
+    paperOrder: (body) => request('POST', '/paper/order', body),
+    paperClose: (id) => request('POST', `/paper/close/${encodeURIComponent(id)}`),
+    paperPortfolio: () => request('GET', '/paper/portfolio'),
+    paperHistory: () => request('GET', '/paper/history'),
+    paperSettings: () => request('GET', '/paper/settings'),
+    paperSetSettings: (body) => request('POST', '/paper/settings', body),
+    paperReset: () => request('POST', '/paper/reset'),
   };
 }
 

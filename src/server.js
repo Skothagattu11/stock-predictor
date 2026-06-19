@@ -104,6 +104,8 @@ const sidecar = createSidecar({ baseUrl: config.QUANT_SIDECAR_URL });
 const predictCache = new TtlCache();
 const predictService = createPredictService({ sidecar, cache: predictCache });
 app.use('/api/predict', createPredictRouter({ service: predictService }));
+const { createPaperRouter } = require('./paper-routes');
+app.use('/api/paper', createPaperRouter({ sidecar }));
 
 const { buildAdapters } = require('./llm/adapters');
 const { createRouter: createLlmRouter } = require('./llm/router');
