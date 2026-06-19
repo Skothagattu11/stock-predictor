@@ -289,13 +289,11 @@ def _pe_for(md: MarketData, symbol: str) -> float | None:
     return None
 
 
-@app.get("/opportunities", response_model=OpportunitiesResult)
-def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "balanced",
-                  md: MarketData = Depends(get_market_data),
-                  providers=Depends(get_discover_providers)):
+def scan_opportunities(md, providers, budget: float, target: float, risk: str) -> list[dict]:
+    """Build the candidate universe (lane-filtered by risk) and score each into an
+    OpportunityPick dict, ranked by expected value. Shared by the endpoint and the
+    paper auto-tick."""
     fmp, yahoo = providers
-    if fmp is None and yahoo is None:
-        raise HTTPException(status_code=503, detail="no screener provider configured")
     threshold, lanes = tier_config(risk)
     disc = build_discover(fmp, yahoo=yahoo)
     seen, candidates = set(), []
@@ -303,8 +301,6 @@ def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "bala
         for item in getattr(disc, lane, []):
             if item.symbol not in seen:
                 seen.add(item.symbol); candidates.append(item.symbol)
-    if not candidates:
-        raise HTTPException(status_code=503, detail="screener returned no candidates")
 
     def _score(sym):
         try:
@@ -312,11 +308,9 @@ def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "bala
             ddf = md.fetch_candles(sym, interval="1d", range_="2y")
             if ddf.empty:
                 return None
-            # ATR from the daily bars we already fetched (avoids a 3rd fetch/symbol).
             datr = (float(ind.atr(ddf["high"], ddf["low"], ddf["close"], 14).iloc[-1])
                     if len(ddf) >= 15 else None)
-            return score_opportunity(sym, idf, ddf, pe=_pe_for(md, sym),
-                                     daily_atr=datr,
+            return score_opportunity(sym, idf, ddf, pe=_pe_for(md, sym), daily_atr=datr,
                                      budget=budget, target=target, threshold=threshold)
         except Exception:
             return None
@@ -326,17 +320,25 @@ def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "bala
         for res in ex.map(_score, candidates):
             if res:
                 picks.append(res)
-    # Rank by expected value (prob*reward - (1-prob)*risk), not raw probability,
-    # so high-probability picks that risk far more than the target sink below
-    # genuinely profitable ones. Tie-break by reward:risk.
     def _ev(p):
         return p["probability"] * p["target_dollars"] - (1 - p["probability"]) * p["risk_dollars"]
     picks.sort(key=lambda p: (_ev(p), p["reward_risk"]), reverse=True)
-    picks = picks[:TOP_N]
-    # (Durable hit/miss tracking for opportunities is a follow-up: the existing
-    # calibration store is setup-shaped, so recording these picks needs a new
-    # store method — deliberately out of scope for Phase A.)
+    return picks
+
+
+@app.get("/opportunities", response_model=OpportunitiesResult)
+def opportunities(budget: float = 150.0, target: float = 12.0, risk: str = "balanced",
+                  md: MarketData = Depends(get_market_data),
+                  providers=Depends(get_discover_providers)):
+    fmp, yahoo = providers
+    if fmp is None and yahoo is None:
+        raise HTTPException(status_code=503, detail="no screener provider configured")
+    _, lanes = tier_config(risk)
+    disc = build_discover(fmp, yahoo=yahoo)
+    if not any(getattr(disc, lane, []) for lane in lanes):
+        raise HTTPException(status_code=503, detail="screener returned no candidates")
+    picks = scan_opportunities(md, providers, budget, target, risk)[:TOP_N]
     return OpportunitiesResult(
         budget=budget, target=target, risk=risk,
-        picks=[OpportunityPick(**p) for p in picks], scanned=len(candidates),
+        picks=[OpportunityPick(**p) for p in picks], scanned=len(picks),
         as_of=datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
