@@ -5,6 +5,19 @@
   function money(x){ return '$' + Number(x).toFixed(2); }
   function signMoney(x){ return (x>=0?'+':'') + money(x); }
 
+  function renderHistory(h) {
+    var closed = (h && h.closed) || [];
+    el('paperHistory').innerHTML = closed.length
+      ? '<div class="pmuted">Closed trades</div>' + closed.map(function (p) {
+          var pnl = (p.exit_price - p.entry) * p.shares;
+          var cls = pnl >= 0 ? 'pp-up' : 'pp-down';
+          return '<div class="pp-row"><span><b>' + esc(p.symbol) + '</b> ' + p.shares + ' sh ' +
+            money(p.entry) + ' → ' + money(p.exit_price) + ' <span class="pmuted">(' + esc(p.exit_reason) + ')</span></span>' +
+            '<span class="' + cls + '">' + signMoney(pnl) + '</span></div>';
+        }).join('')
+      : '<div class="pmuted">No closed trades yet.</div>';
+  }
+
   function render(d) {
     var a = d.account, st = d.stats || {};
     el('paperAccount').innerHTML =
@@ -31,6 +44,8 @@
   function load() {
     fetch('/api/paper/portfolio').then(function(r){return r.json();}).then(render)
       .catch(function(){ el('paperAccount').textContent = 'Paper service unavailable.'; });
+    fetch('/api/paper/history').then(function(r){return r.json();}).then(renderHistory)
+      .catch(function(){});
   }
 
   function init() {

@@ -37,3 +37,13 @@ def test_portfolio_stats():
     assert st["wins"] == 2 and st["losses"] == 1
     assert round(st["win_rate"], 3) == 0.667
     assert st["realized_pnl"] == 10.0
+
+def test_portfolio_stats_excludes_breakeven():
+    closed = [
+        {"shares": 5, "entry": 40.0, "exit_price": 42.0},   # +10 win
+        {"shares": 5, "entry": 40.0, "exit_price": 40.0},   # break-even -> neither
+    ]
+    st = portfolio_stats(closed, starting=10000.0)
+    assert st["wins"] == 1 and st["losses"] == 0
+    assert st["win_rate"] == 1.0
+    assert st["realized_pnl"] == 10.0

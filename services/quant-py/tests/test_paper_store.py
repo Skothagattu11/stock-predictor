@@ -35,3 +35,17 @@ def test_settings_roundtrip_and_reset(tmp_path):
     s.open_position("AAPL", 5, 40.0, 42.0, 38.0, 200.0, "manual")
     s.reset(starting=10000.0)
     assert s.get_account()["cash"] == 10000.0 and s.list_positions() == []
+
+def test_try_open_position_atomic_checks(tmp_path):
+    s = _store(tmp_path)
+    pid, err = s.try_open_position("AAPL", 5, 40.0, 42.0, 38.0, 200.0, "manual")
+    assert err is None and isinstance(pid, str)
+    assert s.get_account()["cash"] == 9800.0
+    # duplicate open symbol -> rejected, no debit
+    pid2, err2 = s.try_open_position("AAPL", 1, 40.0, 42.0, 38.0, 40.0, "manual")
+    assert pid2 is None and "already holding" in err2
+    assert s.get_account()["cash"] == 9800.0
+    # cost exceeding cash -> rejected, no debit
+    pid3, err3 = s.try_open_position("ZZZZ", 1, 50000.0, None, None, 50000.0, "manual")
+    assert pid3 is None and err3 == "insufficient cash"
+    assert s.get_account()["cash"] == 9800.0

@@ -48,10 +48,11 @@ def portfolio_stats(closed, starting) -> dict:
     for p in closed:
         pnl = (p["exit_price"] - p["entry"]) * p["shares"]
         realized += pnl
-        if pnl >= 0:
+        if pnl > 0:
             wins += 1; win_sum += pnl
-        else:
+        elif pnl < 0:
             losses += 1; loss_sum += pnl
+        # pnl == 0 (break-even) counts toward realized P&L but neither win nor loss
     decided = wins + losses
     return {
         "wins": wins, "losses": losses,

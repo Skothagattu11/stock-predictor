@@ -51,6 +51,33 @@ class PaperStore:
             c.execute("UPDATE account SET cash = cash - ? WHERE id=1", (cost,))
         return pid
 
+    def try_open_position(self, symbol, shares, entry, target, stop, cost, source):
+        """Atomic open: re-check cash + duplicate-symbol and debit inside one write
+        transaction (BEGIN IMMEDIATE serializes writers), so a manual order and the
+        auto-tick can't race into negative cash or a double position. Returns
+        (position_id, None) on success or (None, error_message) on rejection."""
+        pid = uuid.uuid4().hex
+        sym = symbol.upper()
+        c = self._conn()
+        try:
+            c.execute("BEGIN IMMEDIATE")
+            cash = c.execute("SELECT cash FROM account WHERE id=1").fetchone()["cash"]
+            if cash < cost - 1e-9:
+                c.rollback(); return None, "insufficient cash"
+            if c.execute("SELECT 1 FROM positions WHERE symbol=? AND status='open'", (sym,)).fetchone():
+                c.rollback(); return None, "already holding an open position in " + sym
+            c.execute("""INSERT INTO positions
+                (id, symbol, shares, entry, target, stop, opened_at, status, source)
+                VALUES (?,?,?,?,?,?,?, 'open', ?)""",
+                      (pid, sym, shares, entry, target, stop, _now(), source))
+            c.execute("UPDATE account SET cash = cash - ? WHERE id=1", (cost,))
+            c.commit()
+            return pid, None
+        except Exception:
+            c.rollback(); raise
+        finally:
+            c.close()
+
     def close_position(self, pid, exit_price, exit_reason):
         with self._conn() as c:
             row = c.execute("SELECT shares, status FROM positions WHERE id=?", (pid,)).fetchone()

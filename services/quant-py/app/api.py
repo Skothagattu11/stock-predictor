@@ -278,13 +278,13 @@ def _portfolio_payload(md) -> dict:
 @app.post("/paper/order")
 def paper_order(body: PaperOrder, md: MarketData = Depends(get_market_data)):
     sym = body.symbol.upper()
-    if any(p["symbol"] == sym for p in _paper.list_positions(status="open")):
-        raise HTTPException(status_code=400, detail="already holding an open position in " + sym)
     price = _live_price(md, sym)
     o = open_order(_paper.get_account()["cash"], sym, price, body.budget, body.target, body.stop)
     if "error" in o:
         raise HTTPException(status_code=400, detail=o["error"])
-    pid = _paper.open_position(sym, o["shares"], o["entry"], body.target, body.stop, o["cost"], "manual")
+    pid, err = _paper.try_open_position(sym, o["shares"], o["entry"], body.target, body.stop, o["cost"], "manual")
+    if err:
+        raise HTTPException(status_code=400, detail=err)
     return {"id": pid, **o}
 
 
@@ -376,7 +376,9 @@ def paper_tick(md):
         o = open_order(_paper.get_account()["cash"], sym, entry, s["budget"], target, stop)
         if "error" in o:
             continue
-        _paper.open_position(sym, o["shares"], o["entry"], target, stop, o["cost"], "auto")
+        pid, err = _paper.try_open_position(sym, o["shares"], o["entry"], target, stop, o["cost"], "auto")
+        if err:
+            continue
         held.add(sym)
 
 
