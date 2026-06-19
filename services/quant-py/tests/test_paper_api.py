@@ -61,3 +61,18 @@ def test_reset_restores(tmp_path):
         assert p["account"]["cash"] == 10000.0 and p["open"] == []
     finally:
         app.dependency_overrides.clear()
+
+def test_paper_tick_closes_on_target(tmp_path, monkeypatch):
+    _fresh(tmp_path)
+    # open a position at $40 with target $42 via the engine/store directly
+    pid = api._paper.open_position("AAPL", 5, 40.0, 42.0, 38.0, 200.0, "manual")
+    import pandas as pd, numpy as np
+    class _MDhit:
+        def fetch_candles(self, symbol, interval="1m", range_="1d"):
+            ts = np.array([2_000_000_000, 2_000_000_060])   # >= opened_at epoch
+            return pd.DataFrame({"timestamp": ts, "open": [40, 41], "high": [41, 42.5],
+                                 "low": [39, 40], "close": [41, 42], "volume": [1e6, 1e6]})
+    api._paper.set_settings(auto_enabled=0, budget=200, target=12, risk="balanced")
+    api.paper_tick(_MDhit())
+    closed = api._paper.list_positions(status="closed")
+    assert len(closed) == 1 and closed[0]["exit_reason"] == "target"

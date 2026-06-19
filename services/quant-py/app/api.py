@@ -16,7 +16,28 @@ def _daily_atr(md: MarketData, symbol: str) -> float | None:
     except Exception:
         return None
 
-app = FastAPI(title="quant-py", version="0.1.0")
+import asyncio
+from contextlib import asynccontextmanager
+
+PAPER_TICK_SECONDS = 60
+
+
+@asynccontextmanager
+async def lifespan(app):
+    async def _loop():
+        while True:
+            await asyncio.sleep(PAPER_TICK_SECONDS)
+            try:
+                await asyncio.to_thread(paper_tick, YahooMarketData())
+            except Exception:
+                pass
+    task = asyncio.create_task(_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+
+app = FastAPI(title="quant-py", version="0.1.0", lifespan=lifespan)
 
 _INTERVAL_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "60m": 60, "1h": 60}
 
@@ -303,6 +324,60 @@ def paper_set_settings(body: PaperSettingsBody):
 def paper_reset():
     _paper.reset()
     return _paper.get_account()
+
+
+def _bars_since(df, opened_at_iso) -> list[dict]:
+    """Today's 1-min bars at/after the position's open time, oldest first."""
+    if df is None or df.empty:
+        return []
+    import calendar, time
+    try:
+        t = time.strptime(opened_at_iso, "%Y-%m-%dT%H:%M:%SZ")
+        epoch = calendar.timegm(t)
+    except Exception:
+        epoch = 0
+    out = []
+    for _, row in df.iterrows():
+        if int(row["timestamp"]) >= epoch:
+            out.append({"high": float(row["high"]), "low": float(row["low"])})
+    return out
+
+
+def paper_tick(md):
+    """One mark/exit + auto-take pass. Best-effort: never raises."""
+    # 1. exits
+    for p in _paper.list_positions(status="open"):
+        if p["target"] is None and p["stop"] is None:
+            continue
+        try:
+            df = md.fetch_candles(p["symbol"], interval="1m", range_="1d")
+        except Exception:
+            continue
+        ex = evaluate_exit(p, _bars_since(df, p["opened_at"]))
+        if ex:
+            _paper.close_position(p["id"], exit_price=ex[1], exit_reason=ex[0])
+    # 2. auto-take
+    s = _paper.get_settings()
+    if not s.get("auto_enabled"):
+        return
+    try:
+        picks = scan_opportunities(md, get_discover_providers(), s["budget"], s["target"], s["risk"])
+    except Exception:
+        return
+    held = {p["symbol"] for p in _paper.list_positions(status="open")}
+    for pick in picks:
+        sym = pick["symbol"]
+        if sym in held:
+            continue
+        entry = pick["price"]
+        target = round(entry * (1 + pick["required_move_pct"]), 4)
+        stop_frac = pick["risk_dollars"] / pick["invested"] if pick["invested"] else 0.0
+        stop = round(entry * (1 - stop_frac), 4)
+        o = open_order(_paper.get_account()["cash"], sym, entry, s["budget"], target, stop)
+        if "error" in o:
+            continue
+        _paper.open_position(sym, o["shares"], o["entry"], target, stop, o["cost"], "auto")
+        held.add(sym)
 
 
 def _prior_day_hilo(md: MarketData, symbol: str):
