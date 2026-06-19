@@ -20,7 +20,12 @@
         ' <span class="' + statusCls + '">' + statusTxt + '</span></div>' +
       '<div><span class="gp-up">+' + money(p.target_dollars) + '</span> / ' +
         '<span class="gp-down">−' + money(p.risk_dollars) + '</span> · R:R ' + p.reward_risk +
-        ' · conv ' + Math.round(p.conviction * 100) + '%</div>' +
+        ' · conv ' + Math.round(p.conviction * 100) + '%' +
+        '  <button class="gp-paper" data-sym="' + esc(p.symbol) +
+          '" data-budget="' + p.invested.toFixed(2) +
+          '" data-target="' + (p.price * (1 + p.required_move_pct)).toFixed(4) +
+          '" data-stop="' + (p.price * (1 - (p.risk_dollars / p.invested))).toFixed(4) +
+          '">Paper Trade</button></div>' +
     '</div>';
   }
 
@@ -36,6 +41,22 @@
       r.addEventListener('click', function () {
         var sym = r.getAttribute('data-sym');
         if (window.selectSymbol) window.selectSymbol(sym);   // deep-dive: existing cards run all 4 LLMs
+      });
+    });
+    Array.prototype.forEach.call(node.querySelectorAll('.gp-paper'), function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        fetch('/api/paper/order', { method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ symbol: b.getAttribute('data-sym'),
+            budget: Number(b.getAttribute('data-budget')),
+            target: Number(b.getAttribute('data-target')),
+            stop: Number(b.getAttribute('data-stop')) }) })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+            b.textContent = res.ok ? '✓ Paper traded' : (res.j.detail || 'rejected');
+            if (res.ok && window.Paper) window.Paper.reload();
+          })
+          .catch(function () { b.textContent = 'error'; });
       });
     });
     if (window.Alerts && window.Alerts.watchOpportunities) window.Alerts.watchOpportunities(data.picks);

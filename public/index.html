@@ -368,6 +368,11 @@
     .gp-tag{font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);margin-left:6px}
     .gp-buy{color:var(--green)} .gp-wait{color:var(--amber)}
     .gp-up{color:var(--green)} .gp-down{color:var(--red)}
+    .gp-paper{background:var(--blue);color:#fff;border:0;border-radius:6px;padding:4px 8px;cursor:pointer;margin-left:8px;font-size:12px}
+    /* ---------- Paper Trading ---------- */
+    .pp-row{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:6px;padding:8px;margin:6px 0;background:var(--panel2)}
+    .pp-up{color:var(--green)} .pp-down{color:var(--red)}
+    #paperReset{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
   </style>
 </head>
 <body>
@@ -495,6 +500,25 @@
         <button id="gpScan">Scan</button>
       </div>
       <div id="gpResults" class="gp-results"><div class="pmuted">Set your budget &amp; target, then Scan.</div></div>
+    </div></div>
+
+    <!-- Paper Trading -->
+    <div id="paperPanel" class="card" style="margin-top:18px"><div class="cardBody">
+      <div class="pcard-head"><span class="phbadge">Paper Trading</span>
+        <span class="pmuted">Simulated trades at live prices — proof before real money.</span></div>
+      <div id="paperAccount" class="pmuted">Loading…</div>
+      <div class="gp-controls">
+        <label><input type="checkbox" id="paperAuto"> Auto-take every pick</label>
+        <label>Budget $ <input id="paperBudget" type="number" value="200" min="50"></label>
+        <label>Target $ <input id="paperTarget" type="number" value="12" min="1"></label>
+        <label>Risk
+          <select id="paperRisk"><option value="cautious">Cautious</option>
+            <option value="balanced" selected>Balanced</option>
+            <option value="aggressive">Aggressive</option></select></label>
+        <button id="paperReset">Reset account</button>
+      </div>
+      <div id="paperOpen"></div>
+      <div id="paperHistory"></div>
     </div></div>
 
     <!-- Predictions section: horizon ribbon + Market/Your view cards -->
@@ -680,5 +704,6 @@
   <script src="discover.js"></script>
   <script src="alerts.js"></script>
   <script src="opportunities.js"></script>
+  <script src="paper.js"></script>
 </body>
 </html>
