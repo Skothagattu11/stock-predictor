@@ -218,6 +218,92 @@ import os as _os
 _calib = CalibrationStore(_os.path.join(config.DATA_DIR, "calibration.db"))
 _history = HistoryStore(config.DATA_DIR)
 
+from app.store.paper import PaperStore
+from app.paper.engine import open_order, evaluate_exit, mark_to_market, portfolio_stats
+from pydantic import BaseModel
+
+_paper = PaperStore(_os.path.join(config.DATA_DIR, "paper.db"))
+
+
+class PaperOrder(BaseModel):
+    symbol: str
+    budget: float = 200.0
+    target: float | None = None
+    stop: float | None = None
+
+
+class PaperSettingsBody(BaseModel):
+    auto_enabled: bool = False
+    budget: float = 200.0
+    target: float = 12.0
+    risk: str = "balanced"
+
+
+def _portfolio_payload(md) -> dict:
+    acct = _paper.get_account()
+    open_rows = _paper.list_positions(status="open")
+    equity = acct["cash"]
+    marked = []
+    for p in open_rows:
+        lp = _live_price(md, p["symbol"]) or p["entry"]
+        m = mark_to_market(p, lp)
+        equity += m["market_value"]
+        marked.append({**p, **m})
+    closed = _paper.list_positions(status="closed")
+    return {"account": {**acct, "equity": round(equity, 2)},
+            "open": marked, "stats": portfolio_stats(closed, acct["starting"])}
+
+
+@app.post("/paper/order")
+def paper_order(body: PaperOrder, md: MarketData = Depends(get_market_data)):
+    sym = body.symbol.upper()
+    if any(p["symbol"] == sym for p in _paper.list_positions(status="open")):
+        raise HTTPException(status_code=400, detail="already holding an open position in " + sym)
+    price = _live_price(md, sym)
+    o = open_order(_paper.get_account()["cash"], sym, price, body.budget, body.target, body.stop)
+    if "error" in o:
+        raise HTTPException(status_code=400, detail=o["error"])
+    pid = _paper.open_position(sym, o["shares"], o["entry"], body.target, body.stop, o["cost"], "manual")
+    return {"id": pid, **o}
+
+
+@app.post("/paper/close/{pid}")
+def paper_close(pid: str, md: MarketData = Depends(get_market_data)):
+    pos = next((p for p in _paper.list_positions(status="open") if p["id"] == pid), None)
+    if pos is None:
+        raise HTTPException(status_code=404, detail="no open position " + pid)
+    price = _live_price(md, pos["symbol"]) or pos["entry"]
+    _paper.close_position(pid, exit_price=price, exit_reason="manual")
+    return {"id": pid, "exit_price": price, "exit_reason": "manual"}
+
+
+@app.get("/paper/portfolio")
+def paper_portfolio(md: MarketData = Depends(get_market_data)):
+    return _portfolio_payload(md)
+
+
+@app.get("/paper/history")
+def paper_history():
+    closed = _paper.list_positions(status="closed")
+    return {"closed": closed, "stats": portfolio_stats(closed, _paper.get_account()["starting"])}
+
+
+@app.get("/paper/settings")
+def paper_settings():
+    return _paper.get_settings()
+
+
+@app.post("/paper/settings")
+def paper_set_settings(body: PaperSettingsBody):
+    _paper.set_settings(body.auto_enabled, body.budget, body.target, body.risk)
+    return _paper.get_settings()
+
+
+@app.post("/paper/reset")
+def paper_reset():
+    _paper.reset()
+    return _paper.get_account()
+
 
 def _prior_day_hilo(md: MarketData, symbol: str):
     try:
