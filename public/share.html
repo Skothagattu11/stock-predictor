@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shared Portfolio</title>
+  <style>
+    :root{
+      --bg:#0b0f1a;--bg-soft:#121829;--card:#161d31;--card-2:#1c2440;
+      --line:#243049;--text:#eaf0ff;--muted:#8b97b5;
+      --accent:#5b8cff;--green:#2dd4a7;--red:#ff5c7a;--amber:#ffb454;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);min-height:100vh;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased}
+    @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    .spinner{display:flex;align-items:center;justify-content:center;min-height:60vh;color:var(--muted);font-size:15px;gap:10px}
+    .err-page{display:flex;align-items:center;justify-content:center;min-height:60vh;flex-direction:column;gap:12px;text-align:center;padding:24px}
+    .err-page .code{font-size:64px;margin-bottom:8px}
+    .err-page h2{font-size:22px;font-weight:800}
+    .err-page p{font-size:14px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="spinner">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
+          <animateTransform attributeName="transform" type="rotate" values="0 12 12;360 12 12" dur="1s" repeatCount="indefinite"/>
+        </path>
+      </svg>
+      Loading portfolio…
+    </div>
+  </div>
+  <script src="share.js"></script>
+</body>
+</html>

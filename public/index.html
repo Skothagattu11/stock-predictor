@@ -375,8 +375,25 @@
     #paperReset{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
   </style>
 </head>
+<script>
+  // Auth gate — redirect to login if no session token present
+  (function() {
+    if (!localStorage.getItem('wm_token')) {
+      window.location.replace('/login.html?next=' + encodeURIComponent(location.pathname + location.search));
+    }
+  })();
+</script>
 <body>
   <div id="errorBanner" class="banner hidden"></div>
+  <!-- Auth bar -->
+  <div style="background:rgba(7,11,18,.9);border-bottom:1px solid #243149;padding:7px 20px;display:flex;align-items:center;justify-content:flex-end;gap:14px;font-size:13px;color:#95a3b8">
+    <span id="authUserLabel"></span>
+    <a href="/manager.html" style="color:#5aa7ff;text-decoration:none;font-weight:600;border:1px solid rgba(90,167,255,.35);padding:4px 12px;border-radius:8px">⬡ Manager Portal</a>
+    <button onclick="(function(){localStorage.removeItem('wm_token');localStorage.removeItem('wm_user');window.location.href='/login.html';})()" style="background:none;border:1px solid #243149;color:#95a3b8;border-radius:8px;padding:4px 12px;cursor:pointer;font-size:13px">Sign out</button>
+  </div>
+  <script>
+    (function(){var u=localStorage.getItem('wm_user');if(u){try{document.getElementById('authUserLabel').textContent=JSON.parse(u).email||'';}catch(e){}}})();
+  </script>
   <div class="wrap">
     <div class="top">
       <div class="brand">
@@ -387,6 +404,9 @@
         <div class="badges">
           <span id="connBadge" class="pill bad"><span class="dot"></span>Disconnected</span>
           <span id="modeBadge" class="pill sim"><span class="dot"></span>Simulated</span>
+          <a href="/manager.html" class="pill" style="text-decoration:none;cursor:pointer;border-color:rgba(90,167,255,.4);color:#cfe2ff" title="Wealth Manager — client portfolios &amp; tracking">
+            <span class="dot" style="background:var(--blue)"></span>Manager
+          </a>
         </div>
         <div class="badges">
           <span id="clock" class="pill" title="Current local date & time">--</span>

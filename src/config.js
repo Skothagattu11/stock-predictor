@@ -14,6 +14,9 @@ const PERPLEXITY_API_KEY = (process.env.PERPLEXITY_API_KEY || '').trim();
 const TV_WEBHOOK_SECRET = (process.env.TV_WEBHOOK_SECRET || '').trim();
 const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
 const ALERT_FROM_EMAIL = (process.env.ALERT_FROM_EMAIL || 'alerts@resend.dev').trim();
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').trim();
+const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+const APP_URL = (process.env.APP_URL || '').trim();
 
 module.exports = {
   FINNHUB_API_KEY,
@@ -27,6 +30,10 @@ module.exports = {
   TV_WEBHOOK_SECRET,
   RESEND_API_KEY,
   ALERT_FROM_EMAIL,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
+  APP_URL,
   hasKey: Boolean(FINNHUB_API_KEY),
   hasGemini: Boolean(GEMINI_API_KEY),
+  hasSupabase: Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY),
 };
