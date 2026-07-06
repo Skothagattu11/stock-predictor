@@ -74,36 +74,31 @@ function createManagerRouter() {
       })
     );
 
-    const holdings = positions.map((p) => {
+    // Compute values internally for allocation math, then strip all dollar fields
+    const rawHoldings = positions.map((p) => {
       const { price, day_change_pct } = priceMap[p.symbol] || { price: p.entry_price, day_change_pct: 0 };
       const gain_pct = p.entry_price ? ((price - p.entry_price) / p.entry_price) * 100 : 0;
-      const total_value = p.shares ? p.shares * price : null;
-      return {
-        symbol: p.symbol,
-        entry_price: p.entry_price,
-        current_price: price || p.entry_price,
-        shares: p.shares,
-        total_value,
-        gain_pct,
-        day_change_pct,
-        target_sell_price: p.target_sell_price,
-        stop_loss_price: p.stop_loss_price,
-      };
+      const mkt_value = p.shares ? p.shares * price : null;
+      return { symbol: p.symbol, gain_pct, day_change_pct, mkt_value };
     }).sort((a, b) => b.gain_pct - a.gain_pct);
 
-    const totalValue = holdings.reduce((s, h) => s + (h.total_value || 0), 0);
-    const avgGain = holdings.length ? holdings.reduce((s, h) => s + h.gain_pct, 0) / holdings.length : 0;
-    const avgDay = holdings.length ? holdings.reduce((s, h) => s + h.day_change_pct, 0) / holdings.length : 0;
+    const totalValue = rawHoldings.reduce((s, h) => s + (h.mkt_value || 0), 0);
+    const avgGain = rawHoldings.length ? rawHoldings.reduce((s, h) => s + h.gain_pct, 0) / rawHoldings.length : 0;
+    const avgDay = rawHoldings.length ? rawHoldings.reduce((s, h) => s + h.day_change_pct, 0) / rawHoldings.length : 0;
 
-    holdings.forEach((h) => {
-      h.allocation_pct = totalValue > 0 && h.total_value ? (h.total_value / totalValue) * 100 : null;
-    });
+    // Public-safe holdings: percentages only, no dollar amounts or position sizes
+    const holdings = rawHoldings.map((h) => ({
+      symbol: h.symbol,
+      gain_pct: h.gain_pct,
+      day_change_pct: h.day_change_pct,
+      allocation_pct: totalValue > 0 && h.mkt_value ? (h.mkt_value / totalValue) * 100 : null,
+    }));
 
     sb.from('share_tokens').update({ view_count: token.view_count + 1 }).eq('token', req.params.token).then(() => {});
 
     return res.json({
       portfolio: { name: portfolio.name, color: portfolio.color, strategy: portfolio.strategy },
-      summary: { stock_count: holdings.length, avg_gain_pct: avgGain, avg_day_change_pct: avgDay, total_value: totalValue },
+      summary: { stock_count: holdings.length, avg_gain_pct: avgGain, avg_day_change_pct: avgDay },
       holdings,
       view_count: token.view_count + 1,
       generated_at: new Date().toISOString(),

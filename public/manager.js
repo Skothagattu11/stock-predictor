@@ -104,6 +104,12 @@
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function num(n, d=2) { return n != null ? Number(n).toFixed(d) : '—'; }
   function dollar(n) { return n != null ? '$' + num(n) : '—'; }
+  function fmtShares(n) {
+    if (n == null) return '—';
+    const s = Number(n);
+    if (Number.isInteger(s)) return s.toLocaleString();
+    return s.toFixed(4).replace(/\.?0+$/, '');
+  }
   function pct(n) { if (n == null) return '—'; return (n >= 0 ? '+' : '') + num(n) + '%'; }
   function pctColor(n) { return n >= 0 ? 'var(--green)' : 'var(--red)'; }
   function fmtDate(s) {
@@ -177,16 +183,25 @@
     liveQuotes = {};
     renderClientList(allClients);
     const detail = document.getElementById('detailArea');
-    detail.innerHTML = '<div class="section"><div class="sec-body" style="padding:32px;text-align:center;color:var(--muted)">Loading…</div></div>';
+    const backBar = '<div class="mob-back-bar"><button class="btn sm" onclick="closeMobileDetail()">← Clients</button></div>';
+    detail.innerHTML = backBar + '<div class="section"><div class="sec-body" style="padding:32px;text-align:center;color:var(--muted)">Loading…</div></div>';
+    document.getElementById('mainLayout')?.classList.add('detail-open');
     try {
       const client = await api(`/clients/${id}`);
       selectedClient = client;
       renderClientDetail(client);
     } catch (e) {
-      detail.innerHTML = `<div class="section"><div class="sec-body">${e.message}</div></div>`;
+      detail.innerHTML = backBar + `<div class="section"><div class="sec-body">${e.message}</div></div>`;
     }
   }
   window.selectClient = selectClient;
+
+  function closeMobileDetail() {
+    document.getElementById('mainLayout')?.classList.remove('detail-open');
+    selectedClient = null;
+    renderClientList(allClients);
+  }
+  window.closeMobileDetail = closeMobileDetail;
 
   function renderClientDetail(client) {
     const portfolios = client.client_portfolios || [];
@@ -195,6 +210,12 @@
     document.getElementById('kpiPositions').textContent = totalPositions;
 
     document.getElementById('detailArea').innerHTML = `
+      <!-- Mobile back navigation -->
+      <div class="mob-back-bar">
+        <button class="btn sm" onclick="closeMobileDetail()">← Clients</button>
+        <span style="font-size:14px;font-weight:700">${esc(client.full_name)}</span>
+      </div>
+
       <!-- Portfolios (shown first so user picks one before seeing profile) -->
       <div class="section">
         <div class="sec-hdr">
@@ -312,7 +333,7 @@
       </div>
 
       <!-- ② Portfolio summary KPIs -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:0">
+      <div class="sum-kpis" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:0">
         ${summaryKpi('Positions', positions.length, 'var(--blue)')}
         ${summaryKpi('Portfolio value', totalCurrent > 0 ? '$' + num(totalCurrent) : '—', 'var(--text)')}
         ${summaryKpi('Total gain', totalGainPct != null ? pct(totalGainPct) : '—', totalGainPct != null ? pctColor(totalGainPct) : 'var(--muted)')}
@@ -325,7 +346,7 @@
             <h3>Positions</h3>
             <span id="priceTimestamp" style="font-size:11px;color:var(--green);font-weight:600;background:rgba(47,209,124,.1);border:1px solid rgba(47,209,124,.25);border-radius:6px;padding:2px 8px">Live · Yahoo</span>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div class="pos-hdr-controls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <div style="position:relative">
               <input class="pos-search-input" type="text" placeholder="Filter by ticker or name…"
                 value="${esc(posFilterQuery)}"
@@ -377,38 +398,50 @@
     return `<table class="pos-table">
       <thead><tr>
         <th>Symbol</th>
-        <th>Entry</th>
-        <th>Live price</th>
-        <th>Gain</th>
-        <th>Day</th>
+        <th>Avg Cost</th>
         <th>Shares</th>
-        <th>Value</th>
+        <th>Live Price</th>
+        <th>P&amp;L</th>
+        <th>Day</th>
+        <th>Mkt Value / Cost</th>
         <th>Target / Stop</th>
         <th></th>
       </tr></thead>
       <tbody>${filtered.map(p => posRow(p, portfolioId)).join('')}</tbody>
-    </table>`;
+    </table>
+    <div class="pos-cards">${filtered.map(p => posCard(p, portfolioId)).join('')}</div>`;
   }
 
   function posRow(p, portfolioId) {
     const q = liveQuotes[p.symbol];
     const livePrice = q?.price ?? null;
-    const gainPct = livePrice != null && p.entry_price
-      ? ((livePrice - p.entry_price) / p.entry_price) * 100
-      : null;
-    const dayPct = q?.dayChangePct ?? null;
-    const value = livePrice != null && p.shares ? p.shares * livePrice : null;
+    const dayPct    = q?.dayChangePct ?? null;
+    const mktValue  = livePrice != null && p.shares ? p.shares * livePrice : null;
+    const costBasis = p.entry_price && p.shares ? p.entry_price * p.shares : null;
+    const plDollar  = mktValue != null && costBasis != null ? mktValue - costBasis : null;
+    const gainPct   = livePrice != null && p.entry_price
+      ? ((livePrice - p.entry_price) / p.entry_price) * 100 : null;
 
     const livePriceHtml = livePrice != null
       ? `<span style="font-weight:700">${dollar(livePrice)}</span>`
       : '<span style="color:var(--muted)">—</span>';
 
-    const gainHtml = gainPct != null
-      ? `<span style="color:${pctColor(gainPct)};font-weight:700">${pct(gainPct)}</span>`
+    // Combined P&L: "$+2,250 / +12.3%" stacked
+    const plHtml = gainPct != null
+      ? `<div style="color:${pctColor(gainPct)};font-weight:700;white-space:nowrap">
+           ${plDollar != null ? (plDollar >= 0 ? '+' : '') + dollar(plDollar) : ''}
+         </div>
+         <div style="color:${pctColor(gainPct)};font-size:11px">${pct(gainPct)}</div>`
       : '<span style="color:var(--muted)">—</span>';
 
     const dayHtml = dayPct != null
       ? `<span style="color:${pctColor(dayPct)}">${pct(dayPct)}</span>`
+      : '<span style="color:var(--muted)">—</span>';
+
+    // Market value with cost basis below it
+    const valueHtml = mktValue != null
+      ? `<div style="font-weight:700">${dollar(mktValue)}</div>
+         ${costBasis != null ? `<div style="font-size:11px;color:var(--muted)">Cost ${dollar(costBasis)}</div>` : ''}`
       : '<span style="color:var(--muted)">—</span>';
 
     const targetStop = [
@@ -422,11 +455,11 @@
         ${p.note ? `<div style="font-size:11px;color:var(--muted)">${esc(p.note)}</div>` : ''}
       </td>
       <td class="pos-price">${dollar(p.entry_price)}</td>
+      <td>${fmtShares(p.shares)}</td>
       <td class="pos-price">${livePriceHtml}</td>
-      <td>${gainHtml}</td>
+      <td>${plHtml}</td>
       <td>${dayHtml}</td>
-      <td>${p.shares != null ? p.shares : '—'}</td>
-      <td class="pos-price">${value != null ? dollar(value) : '—'}</td>
+      <td class="pos-price">${valueHtml}</td>
       <td style="font-size:12px">${targetStop}</td>
       <td class="pos-actions">
         <button class="btn sm" onclick="openSignalDash('${esc(p.symbol)}')" title="View on signal dashboard">📈</button>
@@ -436,6 +469,57 @@
       </td>
     </tr>`;
   }
+
+  // Mobile position card (collapsed by default, tap to expand)
+  function posCard(p, portfolioId) {
+    const q          = liveQuotes[p.symbol];
+    const livePrice  = q?.price ?? null;
+    const dayPct     = q?.dayChangePct ?? null;
+    const mktValue   = livePrice != null && p.shares ? p.shares * livePrice : null;
+    const costBasis  = p.entry_price && p.shares ? p.entry_price * p.shares : null;
+    const plDollar   = mktValue != null && costBasis != null ? mktValue - costBasis : null;
+    const gainPct    = livePrice != null && p.entry_price
+      ? ((livePrice - p.entry_price) / p.entry_price) * 100 : null;
+    const gainHtml = gainPct != null
+      ? `<span style="color:${pctColor(gainPct)};font-weight:700;font-size:13px">${pct(gainPct)}</span>` : '';
+    const dayHtml = dayPct != null
+      ? `<span style="color:${pctColor(dayPct)};font-size:12px">${pct(dayPct)} today</span>` : '';
+    const plDollarHtml = plDollar != null
+      ? `<span style="color:${pctColor(plDollar)};font-size:12px">${plDollar >= 0 ? '+' : ''}${dollar(plDollar)}</span>` : '';
+    return `
+      <div class="pos-card-mob">
+        <div class="pos-card-head" onclick="toggleMobPos(this.parentElement)">
+          <span class="pos-sym" style="font-size:16px;flex-shrink:0">${esc(p.symbol)}</span>
+          <span style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0">${gainHtml}${plDollarHtml}${dayHtml}</span>
+          <span class="pos-chev">▾</span>
+        </div>
+        <div class="pos-card-body">
+          ${livePrice != null ? `<div class="mob-field"><span>Live price</span><b>${dollar(livePrice)}</b></div>` : ''}
+          <div class="mob-field"><span>Avg cost / share</span><b>${dollar(p.entry_price)}</b></div>
+          ${p.shares != null ? `<div class="mob-field"><span>Shares</span><b>${fmtShares(p.shares)}</b></div>` : ''}
+          ${costBasis != null ? `<div class="mob-field"><span>Cost basis</span><b>${dollar(costBasis)}</b></div>` : ''}
+          ${mktValue != null ? `<div class="mob-field"><span>Market value</span><b>${dollar(mktValue)}</b></div>` : ''}
+          ${p.target_sell_price ? `<div class="mob-field"><span>Target</span><b class="up">${dollar(p.target_sell_price)}</b></div>` : ''}
+          ${p.stop_loss_price ? `<div class="mob-field"><span>Stop loss</span><b class="dn">${dollar(p.stop_loss_price)}</b></div>` : ''}
+          ${p.note ? `<div class="mob-field"><span>Note</span><b style="font-size:12px;font-weight:400">${esc(p.note)}</b></div>` : ''}
+          <div class="mob-actions">
+            <button class="btn sm" onclick="openSignalDash('${esc(p.symbol)}')">📈</button>
+            <button class="btn sm" onclick="openEditPosModal('${p.id}')">Edit</button>
+            <button class="btn sm danger" onclick="openSellModal('${p.id}','${esc(p.symbol)}',${livePrice ?? p.entry_price})">Sell</button>
+            <button class="btn sm danger" onclick="deletePosition('${p.id}','${esc(p.symbol)}')">✕</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function toggleMobPos(card) {
+    const body = card.querySelector('.pos-card-body');
+    const chev = card.querySelector('.pos-chev');
+    const isOpen = body.style.display === 'block';
+    body.style.display = isOpen ? 'none' : 'block';
+    if (chev) chev.style.transform = isOpen ? '' : 'rotate(180deg)';
+  }
+  window.toggleMobPos = toggleMobPos;
 
   // Open symbol in signal dashboard (new tab)
   function openSignalDash(symbol) {
@@ -631,6 +715,7 @@
       await api(`/clients/${id}`, { method: 'DELETE' });
       toast('Client deleted');
       selectedClient = null;
+      document.getElementById('mainLayout')?.classList.remove('detail-open');
       document.getElementById('detailArea').innerHTML = '<div class="detail-empty"><div class="icon">👥</div><div>Select a client to view their portfolios and positions</div></div>';
       await loadClients();
     } catch (e) { alert(e.message); }

@@ -41,6 +41,11 @@
     const color = portfolio.color || '#5b8cff';
     const upColor = 'var(--green)';
     const dnColor = 'var(--red)';
+    const gainers = holdings.filter(h => h.gain_pct > 0).length;
+    const losers  = holdings.filter(h => h.gain_pct < 0).length;
+    const trendLabel = summary.avg_gain_pct > 1 ? 'Bullish' : summary.avg_gain_pct < -1 ? 'Bearish' : 'Neutral';
+    const trendColor = summary.avg_gain_pct > 0 ? upColor : summary.avg_gain_pct < 0 ? dnColor : 'var(--muted)';
+    const trendIcon  = summary.avg_gain_pct > 1 ? '↑' : summary.avg_gain_pct < -1 ? '↓' : '→';
 
     document.title = `${portfolio.name} — Shared Portfolio`;
 
@@ -58,26 +63,50 @@
         .kpi .val{font-size:22px;font-weight:800;margin-top:5px}
         .body{max-width:680px;margin:0 auto;padding:24px 24px 60px}
         .sec-lbl{font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px}
+
+        /* Trend card */
+        .trend-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+        .trend-label{font-size:18px;font-weight:800}
+        .trend-sub{font-size:12px;color:var(--muted);margin-top:3px}
+        .trend-bars{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+        .trend-pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px}
+        .trend-pill.up{background:rgba(45,212,167,.12);color:var(--green);border:1px solid rgba(45,212,167,.3)}
+        .trend-pill.dn{background:rgba(255,92,122,.12);color:var(--red);border:1px solid rgba(255,92,122,.3)}
+        .trend-pill.nt{background:rgba(139,151,181,.1);color:var(--muted);border:1px solid rgba(139,151,181,.2)}
+        .trend-track{height:6px;border-radius:4px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:10px;width:100%}
+        .trend-fill-up{height:100%;border-radius:4px;background:var(--green);float:left}
+        .trend-fill-dn{height:100%;border-radius:4px;background:var(--red);float:right}
+
+        /* Holdings */
         .holdings{display:flex;flex-direction:column;gap:10px}
         .holding{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;animation:rise .4s ease both}
-        .h-row{display:flex;align-items:flex-start;gap:12px}
+        .h-row{display:flex;align-items:center;gap:12px}
         .h-ic{width:44px;height:44px;border-radius:12px;background:${color}22;border:1px solid ${color}44;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:${color};flex-shrink:0}
-        .h-info{flex:1;min-width:0}
         .h-sym{font-weight:700;font-size:15px}
-        .h-meta{font-size:12px;color:var(--muted);margin-top:2px}
-        .h-right{text-align:right;flex-shrink:0}
-        .h-gain{font-size:16px;font-weight:800}
-        .h-day{font-size:11px;font-weight:600;margin-top:3px}
-        .h-stats{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);display:flex;gap:20px;align-items:center}
-        .h-stat .lbl{font-size:11px;color:var(--muted)}
-        .h-stat .val{font-size:14px;font-weight:700;margin-top:2px}
-        .alloc-pct{flex:1;text-align:right}
-        .alloc-pct .lbl{font-size:11px;color:var(--muted)}
-        .alloc-pct .val{font-size:14px;font-weight:700;margin-top:2px}
-        .bar-wrap{margin-top:8px;height:6px;border-radius:4px;background:var(--card-2,#1c2440);overflow:hidden}
+        .h-right{text-align:right;flex-shrink:0;margin-left:auto}
+        .h-gain{font-size:18px;font-weight:800}
+        .h-day{font-size:11px;font-weight:600;margin-top:2px}
+        .h-bottom{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+        .alloc-group{display:flex;flex-direction:column;gap:4px;flex:1}
+        .alloc-row{display:flex;align-items:center;justify-content:space-between;font-size:12px}
+        .alloc-lbl{color:var(--muted)}
+        .alloc-val{font-weight:700}
+        .bar-wrap{height:5px;border-radius:4px;background:var(--card-2,#1c2440);overflow:hidden}
         .bar-fill{height:100%;border-radius:4px}
+
         .footer{margin-top:40px;text-align:center;color:var(--muted);font-size:12px}
-        @media(max-width:480px){.kpis{grid-template-columns:1fr 1fr}.h-stats{gap:12px}}
+        @media(max-width:480px){
+          .kpis{grid-template-columns:1fr 1fr}
+          .hdr{padding:18px 16px 14px}
+          .body{padding:16px 16px 48px}
+          .port-name{font-size:18px}
+          .kpi .val{font-size:18px}
+          .h-gain{font-size:16px}
+        }
+        @media(max-width:380px){
+          .kpis{grid-template-columns:1fr}
+          .kpi .val{font-size:16px}
+        }
       </style>
 
       <div class="hdr">
@@ -91,19 +120,37 @@
           </div>
           <div class="kpis">
             ${kpiHtml('Holdings', summary.stock_count, 'var(--accent)')}
-            ${kpiHtml('Avg Gain', pct(summary.avg_gain_pct), summary.avg_gain_pct >= 0 ? upColor : dnColor)}
+            ${kpiHtml('Avg Return', pct(summary.avg_gain_pct), summary.avg_gain_pct >= 0 ? upColor : dnColor)}
             ${kpiHtml('Today', pct(summary.avg_day_change_pct), summary.avg_day_change_pct >= 0 ? upColor : dnColor)}
           </div>
         </div>
       </div>
 
       <div class="body">
+        <!-- Portfolio trend section -->
+        <div class="trend-card">
+          <div>
+            <div class="trend-label" style="color:${trendColor}">${trendIcon} ${trendLabel}</div>
+            <div class="trend-sub">${gainers} of ${holdings.length} position${holdings.length !== 1 ? 's' : ''} gaining · ${losers} declining</div>
+          </div>
+          <div class="trend-bars">
+            <span class="trend-pill up">↑ ${gainers} up</span>
+            ${losers > 0 ? `<span class="trend-pill dn">↓ ${losers} down</span>` : ''}
+            ${holdings.length - gainers - losers > 0 ? `<span class="trend-pill nt">→ ${holdings.length - gainers - losers} flat</span>` : ''}
+          </div>
+          ${holdings.length > 0 ? `
+          <div class="trend-track" style="clear:both">
+            <div class="trend-fill-up" style="width:${(gainers/holdings.length*100).toFixed(1)}%"></div>
+            <div class="trend-fill-dn" style="width:${(losers/holdings.length*100).toFixed(1)}%"></div>
+          </div>` : ''}
+        </div>
+
         <div class="sec-lbl">Holdings (${holdings.length})</div>
         <div class="holdings">
           ${holdings.map((h, i) => holdingHtml(h, i, color, upColor, dnColor)).join('')}
         </div>
         <div class="footer">
-          <div>Powered by Portfolio Manager · Read-only shared view</div>
+          <div>Shared portfolio · Read-only view · Percentages only</div>
           <div style="margin-top:4px;font-size:11px">Viewed ${view_count.toLocaleString()} time${view_count !== 1 ? 's' : ''}</div>
         </div>
       </div>
@@ -116,13 +163,13 @@
 
   function holdingHtml(h, i, color, upColor, dnColor) {
     const gainColor = h.gain_pct >= 0 ? upColor : dnColor;
-    const dayColor = h.day_change_pct >= 0 ? upColor : dnColor;
-    const allocPct = h.allocation_pct;
+    const dayColor  = h.day_change_pct >= 0 ? upColor : dnColor;
+    const allocPct  = h.allocation_pct;
     return `
       <div class="holding" style="animation-delay:${i * 0.04}s">
         <div class="h-row">
           <div class="h-ic">${esc(h.symbol)}</div>
-          <div class="h-info">
+          <div style="flex:1;min-width:0">
             <div class="h-sym">${esc(h.symbol)}</div>
           </div>
           <div class="h-right">
@@ -130,18 +177,18 @@
             <div class="h-day" style="color:${dayColor}">${pct(h.day_change_pct)} today</div>
           </div>
         </div>
-        <div class="h-stats">
-          <div class="h-stat"><div class="lbl">Entry</div><div class="val">${dollar(h.entry_price)}</div></div>
-          <div class="h-stat"><div class="lbl">Now</div><div class="val">${dollar(h.current_price)}</div></div>
-          ${h.shares != null ? `<div class="h-stat"><div class="lbl">Shares</div><div class="val">${h.shares}</div></div>` : ''}
-          ${h.target_sell_price ? `<div class="h-stat"><div class="lbl">Target</div><div class="val" style="color:${upColor}">${dollar(h.target_sell_price)}</div></div>` : ''}
-          ${h.stop_loss_price ? `<div class="h-stat"><div class="lbl">Stop</div><div class="val" style="color:${dnColor}">${dollar(h.stop_loss_price)}</div></div>` : ''}
-          ${allocPct != null ? `<div class="alloc-pct"><div class="lbl">Allocation</div><div class="val">${Number(allocPct).toFixed(1)}%</div></div>` : ''}
-        </div>
         ${allocPct != null ? `
-          <div class="bar-wrap">
-            <div class="bar-fill" style="width:${Math.min(allocPct, 100)}%;background:${gainColor}"></div>
-          </div>` : ''}
+        <div class="h-bottom">
+          <div class="alloc-group">
+            <div class="alloc-row">
+              <span class="alloc-lbl">Portfolio allocation</span>
+              <span class="alloc-val">${Number(allocPct).toFixed(1)}%</span>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar-fill" style="width:${Math.min(allocPct, 100)}%;background:${gainColor}"></div>
+            </div>
+          </div>
+        </div>` : ''}
       </div>
     `;
   }

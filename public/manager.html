@@ -158,8 +158,82 @@
     .search-hit b{color:var(--blue);font-weight:800;min-width:52px}
     .search-hit span{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-    @media(max-width:900px){.layout{grid-template-columns:1fr}.client-list{max-height:300px}.kpis{grid-template-columns:repeat(2,1fr)}}
-    @media(max-width:500px){.port-grid{grid-template-columns:1fr}.profile-grid{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}}
+    /* ── Mobile-position cards (hidden on desktop, shown on mobile) ── */
+    .mob-back-bar{display:none}
+    .pos-cards{display:none}
+    .pos-card-mob{background:var(--panel2);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+    .pos-card-head{display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+    .pos-card-head:active{background:rgba(90,167,255,.08)}
+    .pos-chev{font-size:11px;color:var(--muted);transition:transform .2s;flex-shrink:0;margin-left:4px}
+    .pos-card-body{display:none;border-top:1px solid var(--line)}
+    .mob-field{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.04)}
+    .mob-field span{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+    .mob-field b{font-weight:700;font-size:13px}
+    .mob-actions{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px}
+
+    @keyframes mobSlideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+
+    /* ── 900 px — stack layout ── */
+    @media(max-width:900px){
+      .layout{grid-template-columns:1fr}
+      .client-list{max-height:300px}
+      .kpis{grid-template-columns:repeat(2,1fr)}
+    }
+
+    /* ── 768 px — full mobile treatment ── */
+    @media(max-width:768px){
+      .hdr h1{font-size:19px}
+      .kpi b{font-size:21px}
+
+      /* Client list: let page scroll naturally instead of internal scroll */
+      .client-list{max-height:none}
+
+      /* Slide-panel nav: show panel or detail, never both */
+      .layout{display:block}
+      #mainLayout:not(.detail-open) .detail{display:none}
+      #mainLayout.detail-open .panel{display:none}
+      #mainLayout.detail-open .detail{animation:mobSlideIn .22s ease}
+
+      /* Mobile back bar */
+      .mob-back-bar{display:flex;align-items:center;gap:10px;padding:8px 2px;margin-bottom:6px}
+
+      /* Positions: table hidden, cards shown */
+      .pos-table{display:none!important}
+      .pos-cards{display:flex;flex-direction:column;gap:10px;padding:12px}
+
+      /* Position modal 3-col → single column */
+      .pos-3col{grid-template-columns:1fr!important}
+
+      /* Share URL: wrap on narrow screens */
+      .share-url{flex-wrap:wrap}
+      .share-url input{width:100%;flex:none}
+      .expiry-row{flex-wrap:wrap}
+
+      /* Bottom-sheet modals */
+      .modal-bg.open{align-items:flex-end}
+      .modal{border-radius:22px 22px 0 0;max-width:100%;width:100%;padding:20px 18px 36px;border-left:0;border-right:0;border-bottom:0}
+      .modal::before{content:'';display:block;width:36px;height:4px;background:rgba(255,255,255,.18);border-radius:3px;margin:0 auto 18px}
+
+      /* Toast: centered at bottom */
+      .toast{right:auto;left:50%;transform:translateX(-50%) translateY(10px);bottom:20px;width:calc(100% - 40px);text-align:center;max-width:320px}
+      .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+      /* Filter input full width */
+      .pos-search-input{width:100%!important}
+
+      /* Portfolio summary KPIs: 3-col → 2-col */
+      .sum-kpis{grid-template-columns:1fr 1fr!important}
+    }
+
+    /* ── 500 px — tightest breakpoint ── */
+    @media(max-width:500px){
+      .port-grid{grid-template-columns:1fr}
+      .profile-grid{grid-template-columns:1fr}
+      .kpis{grid-template-columns:1fr 1fr}
+      .wrap{padding:16px 14px}
+      .kpi b{font-size:18px}
+      .sum-kpis{grid-template-columns:1fr!important}
+    }
   </style>
 </head>
 <body>
@@ -196,7 +270,7 @@
     </div>
 
     <!-- Main layout -->
-    <div class="layout">
+    <div class="layout" id="mainLayout">
       <!-- Client list -->
       <div class="panel">
         <div class="panel-hdr">
@@ -279,7 +353,7 @@
         </div>
       </div>
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Fill any two of the three fields below — the third auto-calculates.</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <div class="pos-3col" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
         <div class="field" style="margin:0"><label>Avg price / share ($)</label><input type="number" id="posEntry" min="0.01" step="any" inputmode="decimal" placeholder="e.g. 182.50" /></div>
         <div class="field" style="margin:0"><label>Total shares</label><input type="number" id="posShares" min="0" step="any" inputmode="decimal" placeholder="e.g. 10" /></div>
         <div class="field" style="margin:0"><label>Order value ($)</label><input type="number" id="posAmount" min="0" step="any" inputmode="decimal" placeholder="e.g. 1825" /></div>
