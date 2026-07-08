@@ -122,3 +122,66 @@ APP_URL=http://localhost:3000
 - **No React/Next.js**: This app uses vanilla JS. The manager UI is a standalone HTML page with inline fetch calls.
 - **Live prices in share view**: The public share endpoint reuses the existing `/api/quote/:symbol` Finnhub route to show live prices.
 - **Existing features untouched**: All WebSocket, signals, predictions, paper trading, discovery, and AI chat features remain exactly as they were.
+
+---
+
+## AI Equity Analyst Feature
+
+Planned new page (`/analyst.html`) implementing institutional-grade equity research.
+Full spec and implementation plan: `docs/AI_Equity_Analyst_Plan.md`
+
+### New files (when built)
+- `src/analyst-routes.js` — `POST /api/analyst/report`
+- `src/analyst-service.js` — two-stage pipeline (data gather → LLM report)
+- `src/fmp-client.js` — Financial Modeling Prep API (free tier, 250 calls/day)
+- `src/technicals.js` — RSI(14), MACD(12/26/9), MAs, Bollinger from Yahoo candles
+- `public/analyst.html` + `public/analyst.js` — report UI with confidence meter
+
+### New environment variable
+```
+FMP_API_KEY=<your_key>   # Free at financialmodelingprep.com — no credit card
+```
+
+### Pages added
+| URL | Description |
+|-----|-------------|
+| `/analyst.html` | AI equity analyst — BUY/HOLD/SELL report for any ticker |
+
+---
+
+## Required Skills — AI Equity Analyst
+
+The following skills must be installed for AI-assisted development of this project.
+If any are missing, install them with the commands below.
+
+### Check what's installed
+```bash
+npx skills check
+```
+
+### Install all required skills (run if missing)
+```bash
+# Technical indicators — RSI, MACD, Bollinger, Moving Averages
+npx skills add staskh/trading_skills@technical-analysis -g -y
+
+# Node.js backend service patterns — Express routes, middleware, error handling
+npx skills add wshobson/agents@nodejs-backend-patterns -g -y
+
+# LLM structured output — schema-locked JSON responses across Anthropic/OpenAI/Gemini
+npx skills add sickn33/antigravity-awesome-skills@llm-structured-output -g -y
+
+# Chart & data visualization — confidence meters, sparklines, comparison tables
+npx skills add antvis/chart-visualization-skills@chart-visualization -g -y
+
+# Trading edge extraction — signal quality scoring, alpha hint patterns
+npx skills add tradermonty/claude-trading-skills@edge-hint-extractor -g -y
+```
+
+### What each skill is used for
+| Skill | Used in |
+|---|---|
+| `technical-analysis` | `src/technicals.js` — computing RSI, MACD, MAs from Yahoo candles |
+| `nodejs-backend-patterns` | `src/analyst-routes.js`, `src/analyst-service.js` — service architecture |
+| `llm-structured-output` | `src/llm/` — locking report to 6-section schema |
+| `chart-visualization` | `public/analyst.js` — confidence meter, valuation charts |
+| `edge-hint-extractor` | `src/analyst-service.js` — signal quality scoring for confidence % |
