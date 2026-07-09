@@ -1105,6 +1105,33 @@
   setInterval(tickClock, 1000);
 
   // ---------- Boot ----------
+  // UC-4 (additive only): open the dashboard for a specific ticker and optionally
+  // scroll to the paper panel, via ?ticker=SYM&action=paper — used by the analyst
+  // report's "Place Paper Trade" link and manager/paper "Analyst Report" links.
+  (function applyUrlParams() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var qt = params.get('ticker');
+      if (qt && /^[A-Za-z0-9.]{1,10}$/.test(qt)) {
+        state.symbol = qt.toUpperCase();
+        setText('symbolPill', state.symbol);
+      }
+      if (params.get('action') === 'paper') {
+        setTimeout(function () {
+          var pp = document.getElementById('paperPanel');
+          if (pp) pp.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 500);
+      }
+    } catch (e) { /* non-fatal */ }
+  })();
+  // Signal-card "Analyst Report" button → opens the analyst page for the current ticker.
+  (function wireAnalystBtn() {
+    var btn = document.getElementById('analystReportBtn');
+    if (btn) btn.addEventListener('click', function () {
+      window.open('/analyst.html?ticker=' + encodeURIComponent(state.symbol), '_blank');
+    });
+  })();
+
   setConnBadge(false);
   setModeBadge('simulated');
   syncViewSelects();

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analyst — Observability</title>
+  <style>
+    :root{--bg:#070b12;--panel:#0e1522;--text:#e8eef8;--muted:#95a3b8;--green:#2fd17c;--red:#ff5c6c;--amber:#ffbf47;--blue:#5aa7ff;--line:#243149}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:radial-gradient(circle at top left,#132541 0,#070b12 42%,#05070c 100%);min-height:100vh;font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:var(--text)}
+    .wrap{max-width:1000px;margin:0 auto;padding:26px 18px 60px}
+    header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+    h1{font-size:19px;font-weight:800}
+    a.back{margin-left:auto;color:var(--blue);text-decoration:none;font-size:13px;border:1px solid rgba(90,167,255,.35);padding:5px 12px;border-radius:8px}
+    .sub{font-size:12px;color:var(--muted)}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+    .card{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:14px 16px}
+    .card .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+    .card .big{font-size:20px;font-weight:800;margin-top:4px}
+    .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+    .ok{color:var(--green)}.ok .dot{background:var(--green)}
+    .bad{color:var(--red)}.bad .dot{background:var(--red)}
+    .warn{color:var(--amber)}.warn .dot{background:var(--amber)}
+    table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+    th,td{border:1px solid var(--line);padding:7px 10px;text-align:left}
+    th{color:var(--muted);background:#0a1220;font-weight:600}
+    h3{font-size:13px;margin:18px 0 4px}
+    .scroll{overflow-x:auto}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Analyst — Observability</h1>
+      <a class="back" href="/analyst.html">← Analyst</a>
+    </header>
+    <div class="sub" id="updated">Loading…</div>
+
+    <h3>Connectors</h3>
+    <div class="cards" id="connectors"></div>
+
+    <h3>Summary</h3>
+    <div class="cards" id="summary"></div>
+
+    <h3>Recent requests</h3>
+    <div class="scroll"><table id="requests"><thead><tr><th>ts</th><th>ticker</th><th>verdict</th><th>conf</th><th>cache</th><th>ms</th></tr></thead><tbody></tbody></table></div>
+
+    <h3>Recent errors</h3>
+    <div class="scroll"><table id="errors"><thead><tr><th>ts</th><th>path</th><th>error</th></tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <script>
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    const cls = (s) => s === 'ok' ? 'ok' : (s === 'degraded' || s === 'unavailable') ? 'warn' : 'bad';
+
+    function card(lbl, val, klass) { return `<div class="card"><div class="lbl">${esc(lbl)}</div><div class="big ${klass||''}">${val}</div></div>`; }
+
+    async function refresh() {
+      try {
+        const [h, m] = await Promise.all([
+          fetch('/api/analyst/health').then((r) => r.json()),
+          fetch('/api/analyst/metrics').then((r) => r.json()),
+        ]);
+        const c = h.connectors || {};
+        document.getElementById('connectors').innerHTML =
+          card('Overall', `<span class="dot"></span>${esc(h.status)}`, cls(h.status)) +
+          card('FMP', `<span class="dot"></span>${esc(c.fmp && c.fmp.status)}`, cls(c.fmp && c.fmp.status)) +
+          card('Yahoo', `<span class="dot"></span>${esc(c.yahoo && c.yahoo.status)}`, cls(c.yahoo && c.yahoo.status)) +
+          card('LLM', `<span class="dot"></span>${esc(c.llm && c.llm.status)}`, cls(c.llm && c.llm.status));
+
+        const s = m.summary || {};
+        document.getElementById('summary').innerHTML =
+          card('Total requests', s.totalRequests || 0) +
+          card('Cache hit rate', ((s.cacheHitRate || 0) * 100).toFixed(0) + '%') +
+          card('Avg latency', (s.avgTotalMs || 0) + ' ms') +
+          card('FMP calls today', (s.fmpCallsToday || 0) + ' / 250');
+
+        document.querySelector('#requests tbody').innerHTML = (m.requests || []).map((r) =>
+          `<tr><td>${esc((r.ts||'').slice(11,19))}</td><td>${esc(r.ticker)}</td><td>${esc(r.verdict)}</td><td>${esc(r.confidence)}</td><td>${r.cacheHit?'hit':''}</td><td>${esc(r.totalMs)}</td></tr>`).join('')
+          || '<tr><td colspan="6" class="sub">no requests yet</td></tr>';
+        document.querySelector('#errors tbody').innerHTML = (m.errors || []).map((e) =>
+          `<tr><td>${esc((e.ts||'').slice(11,19))}</td><td>${esc(e.path)}</td><td>${esc(e.error)}</td></tr>`).join('')
+          || '<tr><td colspan="3" class="sub">no errors</td></tr>';
+
+        document.getElementById('updated').textContent = 'Updated ' + new Date().toLocaleTimeString() + ' · auto-refresh 30s';
+      } catch (e) {
+        document.getElementById('updated').textContent = 'Failed to load metrics — is the server running?';
+      }
+    }
+    refresh();
+    setInterval(refresh, 30000);
+  </script>
+</body>
+</html>

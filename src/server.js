@@ -138,6 +138,42 @@ app.use('/api/insight', createInsightRouter({ insightService }));
 console.log(`[llm] ensemble providers configured: ${llmRouter.size}`);
 console.log(`[tv] webhook ready at /api/tv/webhook (secret ${config.TV_WEBHOOK_SECRET ? 'set' : 'NOT set'})`);
 
+// ---- AI Equity Analyst -----------------------------------------------------
+// Claude(Anthropic)-primary, OpenAI-fallback (deviation documented in analyst-service.js).
+// Fundamentals: FMP (stable API, keyed). Price/candles/technicals + news: Yahoo (keyless,
+// Finnhub when a key is set). Per-source caches: fundamentals 12h, technicals 2min, news 10min.
+const { createAnalystService } = require('./analyst-service');
+const { createAnalystRouter } = require('./analyst-routes');
+const { createObservability } = require('./analyst-observability');
+const { createNewsClient } = require('./news-client');
+const fmpClient = require('./fmp-client');
+const yahooFundamentals = require('./yahoo-fundamentals');
+const { createFundamentals } = require('./fundamentals');
+// Fundamentals: FMP primary → Yahoo fallback for symbols FMP's free tier gates.
+const fundamentalsProvider = createFundamentals({ fmp: fmpClient, yahoo: yahooFundamentals });
+const analystAdapters = buildAdapters(config);
+const analystProviders = ['anthropic', 'openai', 'gemini']
+  .map((name) => analystAdapters.find((a) => a.name === name))
+  .filter(Boolean);
+const analystObs = createObservability({ logPath: 'logs/analyst.log' });
+const analystCache = new TtlCache();
+const analystService = createAnalystService({
+  fmp: fundamentalsProvider,      // FMP primary → Yahoo fallback (getFundamentals + getPeers)
+  technicals: require('./technicals'),
+  news: createNewsClient({ finnhubKey: config.FINNHUB_API_KEY }),
+  cache: analystCache,
+  llm: analystProviders,
+  config: Object.assign({}, config, { fmpCallsPerFetch: fmpClient.CALLS_PER_REQUEST }),
+  obs: analystObs,
+});
+app.use('/api/analyst', createAnalystRouter({
+  svc: analystService, obs: analystObs, config,
+  fmpCallsPerReport: fmpClient.CALLS_PER_REQUEST,
+  cache: analystCache,
+  llmModel: analystProviders.map((a) => a.name).join(','),
+}));
+console.log(`[analyst] ready at /api/analyst (LLM: ${analystProviders.map((a) => a.name).join(',') || 'none'}; fundamentals: FMP${config.FMP_API_KEY ? '' : '(no key)'}→Yahoo fallback; news: ${config.FINNHUB_API_KEY ? 'Finnhub+Yahoo' : 'Yahoo'})`);
+
 const WATCHLIST = (process.env.WATCHLIST || 'AAPL,MSFT,NVDA,SPY').split(',').map((s) => s.trim()).filter(Boolean);
 if (config.QUANT_SIDECAR_URL) {
   createScheduler({ service: predictService, symbols: WATCHLIST,

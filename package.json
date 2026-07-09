@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "node --test test/*.test.js tests/unit/*.test.js",
+    "test:integration": "node --test tests/integration/*.test.js"
   },
   "license": "MIT",
   "dependencies": {

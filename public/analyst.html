@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Equity Analyst</title>
+  <style>
+    :root{--bg:#070b12;--panel:#0e1522;--panel2:#111b2d;--text:#e8eef8;--muted:#95a3b8;--green:#2fd17c;--red:#ff5c6c;--amber:#ffbf47;--blue:#5aa7ff;--line:#243149}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:radial-gradient(circle at top left,#132541 0,#070b12 42%,#05070c 100%);min-height:100vh;font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;color:var(--text)}
+    .wrap{max-width:960px;margin:0 auto;padding:28px 18px 80px}
+    header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+    .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,#246bfe,#35b2ff);display:flex;align-items:center;justify-content:center;font-size:20px}
+    h1{font-size:20px;font-weight:800;letter-spacing:-.02em}
+    .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+    a.back{margin-left:auto;color:var(--blue);text-decoration:none;font-size:13px;border:1px solid rgba(90,167,255,.35);padding:5px 12px;border-radius:8px}
+    .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:20px 0}
+    .field{display:flex;flex-direction:column;gap:5px}
+    label{font-size:11.5px;color:var(--muted);font-weight:500}
+    input,select{background:#0a1220;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:10px 12px;font-size:14px;outline:none}
+    input:focus,select:focus{border-color:var(--blue)}
+    #ticker-input{min-width:240px}
+    .btn{background:linear-gradient(135deg,#246bfe,#35b2ff);color:#fff;border:0;border-radius:10px;padding:11px 20px;font-size:14px;font-weight:700;cursor:pointer}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .hint{font-size:12px;color:var(--muted);margin-top:-8px}
+    .state{padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--panel);margin-top:8px;font-size:14px}
+    .state.err{border-color:rgba(255,92,108,.35);color:#ffc8ce}
+    .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .verdict-banner{display:flex;flex-wrap:wrap;align-items:center;gap:16px;padding:18px 20px;border-radius:16px;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel2),var(--panel));margin-top:8px}
+    .badge{font-size:22px;font-weight:900;letter-spacing:.04em;padding:8px 20px;border-radius:12px}
+    .badge.BUY{background:rgba(47,209,124,.15);color:var(--green);border:1px solid rgba(47,209,124,.4)}
+    .badge.HOLD{background:rgba(255,191,71,.15);color:var(--amber);border:1px solid rgba(255,191,71,.4)}
+    .badge.SELL{background:rgba(255,92,108,.15);color:var(--red);border:1px solid rgba(255,92,108,.4)}
+    .conf{flex:1;min-width:200px}
+    .conf .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:5px}
+    .meter{height:10px;border-radius:999px;background:#0a1220;overflow:hidden;border:1px solid var(--line)}
+    .meter > span{display:block;height:100%;border-radius:999px}
+    .tkr{font-size:18px;font-weight:800}
+    .sections{display:grid;gap:14px;margin-top:16px}
+    .card{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:16px 18px}
+    .card h3{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:10px}
+    .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px}
+    .kv .k{color:var(--muted)}
+    .kv .v{color:var(--text)}
+    ul.tight{margin:0;padding-left:18px;font-size:13.5px;line-height:1.55}
+    .pending{color:var(--amber);font-size:12px}
+    .disc{font-size:12px;color:var(--muted);margin-top:14px;font-style:italic}
+    table.cmp{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+    table.cmp th,table.cmp td{border:1px solid var(--line);padding:9px 11px;text-align:left}
+    table.cmp th{color:var(--muted);font-weight:600;background:#0a1220}
+    .cmp-scroll{overflow-x:auto}
+    .foot{font-size:11.5px;color:var(--muted);margin-top:10px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">📈</div>
+      <div>
+        <h1>AI Equity Analyst</h1>
+        <div class="sub">Fundamental + technical research · BUY / HOLD / SELL with confidence</div>
+      </div>
+      <a class="back" href="/">← Dashboard</a>
+    </header>
+
+    <div class="controls">
+      <div class="field">
+        <label for="ticker-input">Ticker(s)</label>
+        <input id="ticker-input" type="text" placeholder="NVDA  ·  or  NVDA, TSLA for comparison" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="depth-select">Depth</label>
+        <select id="depth-select"><option value="standard">Standard</option><option value="deep">Deep</option></select>
+      </div>
+      <button id="run-btn" class="btn">Analyse</button>
+    </div>
+    <div class="hint">Enter a US ticker. Two or more comma-separated tickers run a side-by-side comparison.</div>
+
+    <div id="state" class="state" style="display:none"></div>
+    <div id="report"></div>
+    <div id="comparison" class="cmp-scroll"></div>
+
+    <div class="foot">For research purposes; not personalized investment advice.</div>
+  </div>
+  <script src="analyst.js"></script>
+</body>
+</html>

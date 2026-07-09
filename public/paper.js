@@ -31,6 +31,7 @@
           return '<div class="pp-row"><span><b>'+esc(p.symbol)+'</b> '+p.shares+' sh @ '+money(p.entry)+
             ' → '+money(p.last_price)+'</span>'+
             '<span class="'+cls+'">'+signMoney(p.unrealized_pnl_abs)+'</span>'+
+            '<button data-analyst="'+esc(p.symbol)+'">Analyst</button>'+
             '<button data-close="'+esc(p.id)+'">Close</button></div>';
         }).join('')
       : '<div class="pmuted">No open paper positions.</div>';
@@ -38,6 +39,10 @@
       b.addEventListener('click', function(){
         fetch('/api/paper/close/'+encodeURIComponent(b.getAttribute('data-close')),{method:'POST'})
           .then(load); });
+    });
+    Array.prototype.forEach.call(el('paperOpen').querySelectorAll('button[data-analyst]'), function(b){
+      b.addEventListener('click', function(){
+        window.open('/analyst.html?ticker='+encodeURIComponent(b.getAttribute('data-analyst')),'_blank'); });
     });
   }
 
