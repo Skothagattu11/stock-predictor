@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User Guide — Equity Signal Platform</title>
+  <style>
+    :root {
+      --bg: #f5f7fa; --panel: #ffffff; --panel2: #f0f3f8;
+      --text: #1a2233; --muted: #64748b; --green: #16a34a;
+      --red: #dc2626; --amber: #d97706; --blue: #2563eb; --line: #dde3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      line-height: 1.65;
+    }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ── */
+    .shell { display: flex; min-height: 100vh; }
+
+    nav {
+      width: 240px; flex: 0 0 240px;
+      background: #ffffff;
+      border-right: 1px solid var(--line);
+      padding: 28px 0 40px;
+      position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    }
+    nav .brand {
+      padding: 0 20px 24px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 16px;
+    }
+    nav .brand .logo {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, #2563eb, #38bdf8);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; margin-bottom: 10px;
+    }
+    nav .brand h1 { font-size: 14px; font-weight: 800; letter-spacing: -.02em; color: var(--text); }
+    nav .brand p { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    nav ul { list-style: none; padding: 0 10px; }
+    nav ul li a {
+      display: block; padding: 8px 12px; border-radius: 8px;
+      font-size: 13px; color: var(--muted); font-weight: 500;
+    }
+    nav ul li a:hover { background: #f0f3f8; color: var(--text); text-decoration: none; }
+    nav ul li a.active { background: #eff6ff; color: var(--blue); font-weight: 600; }
+    nav ul .section-label {
+      padding: 14px 12px 4px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: #94a3b8;
+    }
+
+    main { flex: 1; min-width: 0; padding: 48px 52px 80px; max-width: 860px; }
+
+    /* ── Typography ── */
+    h2 { font-size: 26px; font-weight: 800; letter-spacing: -.03em; margin-bottom: 6px; color: var(--text); }
+    h3 { font-size: 17px; font-weight: 700; margin: 32px 0 10px; color: var(--text); }
+    h4 { font-size: 12px; font-weight: 700; color: var(--blue); margin: 20px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
+    p { margin-bottom: 14px; font-size: 14.5px; color: #374151; }
+    ul, ol { margin: 0 0 14px 20px; font-size: 14.5px; color: #374151; }
+    li { margin-bottom: 6px; }
+    code {
+      background: #eff6ff; color: #1d4ed8;
+      padding: 2px 7px; border-radius: 6px; font-size: 13px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      border: 1px solid #bfdbfe;
+    }
+    pre {
+      background: #f8fafc; border: 1px solid var(--line); border-radius: 10px;
+      padding: 14px 16px; overflow-x: auto; margin-bottom: 14px;
+      font-size: 13px; color: #1e3a5f;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    }
+    pre code { background: none; border: none; padding: 0; color: inherit; }
+
+    /* ── Section divider ── */
+    .section { margin-bottom: 56px; scroll-margin-top: 32px; }
+    .section-hero {
+      border: 1px solid var(--line); border-radius: 16px;
+      background: linear-gradient(180deg, #ffffff, #f8fafc);
+      padding: 20px 24px; margin-bottom: 20px; display: flex; gap: 16px; align-items: flex-start;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .section-hero .icon {
+      font-size: 28px; flex: 0 0 auto; margin-top: 2px;
+    }
+    .section-hero h2 { margin-bottom: 4px; }
+    .section-hero .sub { font-size: 13px; color: var(--muted); }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 16px;
+            border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    th { background: #f8fafc; color: var(--muted); font-size: 11px; font-weight: 700;
+         text-transform: uppercase; letter-spacing: .07em; padding: 9px 12px; text-align: left;
+         border-bottom: 1px solid var(--line); }
+    td { padding: 9px 12px; border-bottom: 1px solid #edf0f7; color: #374151; vertical-align: top; }
+    tr:last-child td { border-bottom: 0; }
+    tbody tr:hover td { background: #f8fafc; }
+
+    /* ── Callout ── */
+    .callout {
+      border-left: 3px solid var(--blue); background: #eff6ff;
+      border-radius: 0 10px 10px 0; padding: 12px 16px; margin-bottom: 14px;
+      font-size: 13.5px; color: #1e3a5f;
+    }
+    .callout.warn { border-color: var(--amber); background: #fffbeb; color: #78350f; }
+    .callout.tip  { border-color: var(--green);  background: #f0fdf4; color: #14532d; }
+    .callout strong { display: block; margin-bottom: 4px; }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; margin-right: 4px; vertical-align: middle;
+    }
+    .badge.buy  { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .badge.sell { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .badge.wait { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+    .badge.blue { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
+
+    /* ── Step list ── */
+    .steps { counter-reset: step; list-style: none; margin-left: 0; }
+    .steps li {
+      counter-increment: step;
+      display: flex; gap: 14px; margin-bottom: 14px; align-items: flex-start;
+    }
+    .steps li::before {
+      content: counter(step);
+      flex: 0 0 28px; height: 28px; border-radius: 50%;
+      background: linear-gradient(135deg, #2563eb, #38bdf8);
+      color: #fff; font-size: 12px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
+    }
+
+    /* ── Chip row ── */
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .chip {
+      padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+      border: 1px solid var(--line); background: #f8fafc; color: var(--muted);
+    }
+
+    /* ── Page header ── */
+    .page-header {
+      border-bottom: 1px solid var(--line); padding-bottom: 20px; margin-bottom: 36px;
+    }
+    .page-header h1 { font-size: 22px; font-weight: 800; letter-spacing: -.02em; color: var(--text); }
+    .page-header p { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+
+    /* ── Pill navigation quick-ref ── */
+    .url-row {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+    }
+    .url-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      border: 1px solid #bfdbfe; background: #eff6ff;
+      padding: 7px 13px; border-radius: 999px; font-size: 12px; color: #1d4ed8;
+    }
+    .url-pill code { background: none; border: none; color: #1d4ed8; padding: 0; font-size: 12px; }
+
+    @media (max-width: 860px) {
+      nav { display: none; }
+      main { padding: 24px 20px 60px; }
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Sidebar nav -->
+  <nav>
+    <div class="brand">
+      <div class="logo">📊</div>
+      <h1>Equity Signal Platform</h1>
+      <p>User Guide</p>
+    </div>
+    <ul>
+      <li class="section-label">Getting started</li>
+      <li><a href="#overview">Platform overview</a></li>
+      <li><a href="#pages">Pages at a glance</a></li>
+
+      <li class="section-label">Core features</li>
+      <li><a href="#dashboard">Signal Dashboard</a></li>
+      <li><a href="#analyst">AI Equity Analyst</a></li>
+      <li><a href="#manager">Wealth Manager</a></li>
+
+      <li class="section-label">Trading tools</li>
+      <li><a href="#paper">Paper Trading</a></li>
+      <li><a href="#pine">Pine Script Bridge</a></li>
+
+      <li class="section-label">Outcomes</li>
+      <li><a href="#reading-signals">Reading signals</a></li>
+      <li><a href="#disclaimer">Disclaimer</a></li>
+    </ul>
+  </nav>
+
+  <!-- Main content -->
+  <main>
+    <div class="page-header">
+      <h1>Equity Signal Platform — User Guide</h1>
+      <p>For portfolio managers and wealth analysts. Last updated July 2026.</p>
+    </div>
+
+    <!-- ── OVERVIEW ── -->
+    <div class="section" id="overview">
+      <div class="section-hero">
+        <div class="icon">🗺️</div>
+        <div>
+          <h2>Platform overview</h2>
+          <div class="sub">What this tool is, and what it is not</div>
+        </div>
+      </div>
+      <p>
+        This platform is a live equity research and simulation environment. It streams real-time price data, computes technical indicators, generates AI-powered research reports, and lets you simulate trades — all in one browser tab. It is designed to help you form a view faster and stress-test ideas before committing real capital.
+      </p>
+      <div class="callout warn">
+        <strong>Not financial advice.</strong>
+        Every signal, report, and recommendation on this platform is an analytical prompt, not a directive. Apply your own judgement before acting on behalf of clients.
+      </div>
+      <p>The platform has five interconnected tools:</p>
+      <table>
+        <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Signal Dashboard</strong></td><td>Live chart, technical indicators, candle patterns, BUY / SELL / WAIT signal</td></tr>
+          <tr><td><strong>AI Equity Analyst</strong></td><td>Institutional-style research report for any US ticker — BUY / HOLD / SELL with confidence score</td></tr>
+          <tr><td><strong>Wealth Manager</strong></td><td>Client and portfolio tracker with live P&amp;L, shareable read-only links</td></tr>
+          <tr><td><strong>Paper Trading</strong></td><td>Simulated trade book at live prices — test strategies with zero risk</td></tr>
+          <tr><td><strong>Pine Script Bridge</strong></td><td>Auto-execute or queue trades from TradingView Pine Script alerts via webhook</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── PAGES ── -->
+    <div class="section" id="pages">
+      <div class="section-hero">
+        <div class="icon">🔗</div>
+        <div>
+          <h2>Pages at a glance</h2>
+          <div class="sub">Every URL and what lives there</div>
+        </div>
+      </div>
+      <div class="url-row">
+        <div class="url-pill"><code>/</code> Signal Dashboard (public)</div>
+        <div class="url-pill"><code>/analyst.html</code> AI Analyst</div>
+        <div class="url-pill"><code>/manager.html</code> Wealth Manager</div>
+        <div class="url-pill"><code>/login.html</code> Sign in / Register</div>
+        <div class="url-pill"><code>/share.html?token=…</code> Public portfolio view</div>
+        <div class="url-pill"><code>/admin.html</code> System diagnostics</div>
+        <div class="url-pill"><code>/guide.html</code> This document</div>
+      </div>
+      <p>The dashboard is public. The Wealth Manager and its API require a login. The share page is public but token-gated (you control the link).</p>
+    </div>
+
+    <!-- ── SIGNAL DASHBOARD ── -->
+    <div class="section" id="dashboard">
+      <div class="section-hero">
+        <div class="icon">📈</div>
+        <div>
+          <h2>Signal Dashboard</h2>
+          <div class="sub">Live candlestick chart · indicators · pattern detection · signals</div>
+        </div>
+      </div>
+
+      <h3>Searching for a ticker</h3>
+      <p>
+        Use the search box in the chart header. Start typing a company name or ticker symbol — results appear as you type. Click a result to load the live chart.
+      </p>
+
+      <h3>The live chart</h3>
+      <p>
+        The chart streams real-time candles over WebSocket when markets are open. Use the controls in the header to change:
+      </p>
+      <table>
+        <thead><tr><th>Control</th><th>Options</th></tr></thead>
+        <tbody>
+          <tr><td>Candle size</td><td>1m · 5m · 15m · 30m · 1h · 1 day · 1 week</td></tr>
+          <tr><td>History range</td><td>1D · 5D · 1M · 3M · 6M · YTD · 1Y · 5Y · Max</td></tr>
+          <tr><td>Chart style</td><td>Candles · Line</td></tr>
+          <tr><td>Simulate</td><td>Switches to a synthetic data feed — useful for demos when markets are closed</td></tr>
+        </tbody>
+      </table>
+      <p>Overlaid on the chart are: EMA 9 (fast, blue), EMA 20 (mid, amber), EMA 50 (slow, purple), Bollinger Bands (dashed), VWAP (session), Supertrend, and volume bars.</p>
+
+      <h3>The signal box</h3>
+      <p>
+        The signal box on the right shows the current market signal for the loaded ticker:
+      </p>
+      <div class="chips">
+        <span class="chip" style="color:var(--green);border-color:rgba(47,209,124,.4)">BUY / LONG ≥ 64</span>
+        <span class="chip" style="color:var(--red);border-color:rgba(255,92,108,.4)">SELL / SHORT ≤ 36</span>
+        <span class="chip" style="color:var(--amber);border-color:rgba(255,191,71,.4)">WAIT 37–63</span>
+      </div>
+      <p>
+        The score (0–100) is built from a weighted blend of: VWAP position, Supertrend direction, Opening Range Breakout, EMA alignment, RSI, MACD histogram, volume pulse, and detected candle patterns.
+      </p>
+      <p>Below the signal is the <strong>Entry / Exit plan</strong> — machine-calculated buy trigger, stop loss, and sell/trim target levels based on current structure.</p>
+
+      <h3>Indicator snapshot</h3>
+      <p>
+        Scrolling down you'll find the live indicator readout: RSI 14, EMA stack, volume pulse, MACD histogram, ATR 14, VWAP and its session position, Supertrend direction, opening range, and Bollinger Band levels.
+      </p>
+
+      <h3>Your position tracker</h3>
+      <p>
+        Enter any two of — average price per share, number of shares, or total order value — and the tool computes your unrealized P&amp;L and gives you a personalized call (HOLD · TAKE PROFIT · SELL / TRIM · CUT LOSS) based on your cost basis relative to the current signal and price structure.
+      </p>
+
+      <h3>AI assistant</h3>
+      <p>
+        The floating chat widget (bottom right, labelled <em>Ask the assistant</em>) lets you ask free-text questions about the current chart, your position, or the market. Enable the <strong>Web</strong> toggle to let the assistant search the internet for context.
+      </p>
+
+      <h3>Market news</h3>
+      <p>
+        The collapsible News section pulls the latest headlines for the loaded ticker from Finnhub and Yahoo Finance. Articles open in a new tab.
+      </p>
+    </div>
+
+    <!-- ── AI EQUITY ANALYST ── -->
+    <div class="section" id="analyst">
+      <div class="section-hero">
+        <div class="icon">🧠</div>
+        <div>
+          <h2>AI Equity Analyst</h2>
+          <div class="sub">BUY / HOLD / SELL research reports with confidence scoring</div>
+        </div>
+      </div>
+
+      <p>The Analyst page generates an institutional-style equity research report in under 15 seconds. Data is pulled from live market feeds; the AI writes the qualitative analysis on top. <strong>Numbers are never invented by the model.</strong></p>
+
+      <h3>Running a report</h3>
+      <ol class="steps">
+        <li>Navigate to <code>/analyst.html</code> or click the <strong>Analyst</strong> pill in the top navigation.</li>
+        <li>Type a US ticker in the search box. Results filter as you type — click to select, or type the symbol exactly (e.g. <code>NVDA</code>).</li>
+        <li>Choose depth: <strong>Standard</strong> for a quick report, <strong>Deep</strong> for peer benchmarking.</li>
+        <li>Click <strong>Analyse</strong> or press Enter. The report appears within ~10–15 seconds.</li>
+      </ol>
+
+      <h4>Side-by-side comparison</h4>
+      <p>Type two or more tickers separated by commas to run a comparison:</p>
+      <pre>AAPL, MSFT, GOOGL</pre>
+      <p>The tool runs a report for each ticker in parallel, then renders a ranked comparison table with an AI-generated rationale for the winner.</p>
+
+      <h4>Forcing a fresh report</h4>
+      <p>Reports are cached for 30 minutes. After an earnings release or major event, force a fresh run by appending <code>?fresh=1</code>:</p>
+      <pre>/analyst.html?ticker=AAPL&amp;fresh=1</pre>
+
+      <h3>Reading the report</h3>
+      <table>
+        <thead><tr><th>Section</th><th>What it tells you</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Company Overview</strong></td><td>Sector, market cap, AI investment thesis paragraph</td></tr>
+          <tr><td><strong>Financial Performance</strong></td><td>Revenue, EPS, gross margin, free cash flow, trend, beat/miss</td></tr>
+          <tr><td><strong>Strengths &amp; Risks</strong></td><td>Bulleted strengths and key risk factors</td></tr>
+          <tr><td><strong>Valuation</strong></td><td>P/E, P/S, EV/EBITDA, PEG ratios — vs sector and history</td></tr>
+          <tr><td><strong>Technical Trend</strong></td><td>RSI, MACD crossover, SMA 50/200 position, support &amp; resistance levels</td></tr>
+          <tr><td><strong>Recommendation</strong></td><td>BUY / HOLD / SELL, primary drivers, invalidation conditions, confidence justification</td></tr>
+        </tbody>
+      </table>
+
+      <h4>Verdict and confidence score</h4>
+      <p>The verdict (BUY / HOLD / SELL) at the top comes from AI analysis of the narrative. The confidence score (0–100%) is calculated from seven independent technical and fundamental signals:</p>
+      <table>
+        <thead><tr><th>Signal</th><th>Bullish condition</th></tr></thead>
+        <tbody>
+          <tr><td>RSI (14)</td><td>Between 30 and 70 (not extended)</td></tr>
+          <tr><td>MACD</td><td>Bullish crossover</td></tr>
+          <tr><td>vs SMA 200</td><td>Price above the 200-day moving average</td></tr>
+          <tr><td>P/E ratio</td><td>Positive and below 40</td></tr>
+          <tr><td>Debt / equity</td><td>Below 1.0</td></tr>
+          <tr><td>Revenue trend</td><td>Growing year over year</td></tr>
+        </tbody>
+      </table>
+      <div class="callout tip">
+        <strong>Circuit breaker:</strong> if the confidence score falls below 50%, the verdict is automatically overridden to HOLD — regardless of the AI's narrative. This prevents a bullish recommendation from going out when the underlying signals are mixed.
+      </div>
+      <p>
+        <span class="badge buy">Green</span> ≥ 80% confidence ·
+        <span class="badge wait">Amber</span> 50–79% ·
+        <span class="badge sell">Red</span> &lt; 50%
+      </p>
+
+      <h4>Placing a paper trade from a report</h4>
+      <p>Every report banner has a <strong>Place Paper Trade →</strong> button. It takes you to the signal dashboard pre-loaded with that ticker, ready to open a simulated position.</p>
+    </div>
+
+    <!-- ── WEALTH MANAGER ── -->
+    <div class="section" id="manager">
+      <div class="section-hero">
+        <div class="icon">💼</div>
+        <div>
+          <h2>Wealth Manager</h2>
+          <div class="sub">Client and portfolio tracker with live P&amp;L and shareable links</div>
+        </div>
+      </div>
+
+      <h3>Signing in</h3>
+      <ol class="steps">
+        <li>Go to <code>/login.html</code> and enter your credentials (or register a new account).</li>
+        <li>On success you are redirected to <code>/manager.html</code>. Your session stays active for the browser session; signing out clears it.</li>
+      </ol>
+
+      <h3>Creating clients and portfolios</h3>
+      <ol class="steps">
+        <li>Click <strong>+ Add Client</strong> and enter the client's name. The client is saved immediately.</li>
+        <li>Click a client row to expand it, then click <strong>+ New Portfolio</strong> (e.g. "Growth", "Income", "Retirement").</li>
+        <li>Inside a portfolio, click <strong>+ Add Position</strong> and fill in the ticker, number of shares, and entry price.</li>
+      </ol>
+      <p>Every position shows live price, market value, unrealized P&amp;L, and P&amp;L %. Rows update automatically. The portfolio footer shows the total market value and aggregate P&amp;L.</p>
+
+      <h3>Running an analyst report from a position</h3>
+      <p>Each position row has an <strong>Analyst</strong> button. Clicking it opens a pre-filled analyst report for that ticker in a new tab.</p>
+
+      <h3>Sharing a portfolio</h3>
+      <ol class="steps">
+        <li>Open a portfolio and click <strong>Share</strong>.</li>
+        <li>A unique link is generated (e.g. <code>/share.html?token=abc123…</code>).</li>
+        <li>Send the link to the client. The page shows positions, live prices, and P&amp;L — no login required.</li>
+        <li>You can revoke the link or set an expiry date from the same Share panel.</li>
+      </ol>
+      <div class="callout">
+        <strong>Privacy:</strong> the share token is a long random UUID. Only people with the exact link can see the portfolio. The Wealth Manager API is fully isolated per account — you cannot see another manager's clients.
+      </div>
+    </div>
+
+    <!-- ── PAPER TRADING ── -->
+    <div class="section" id="paper">
+      <div class="section-hero">
+        <div class="icon">🧾</div>
+        <div>
+          <h2>Paper Trading</h2>
+          <div class="sub">Simulated trades at live prices — zero risk, real price action</div>
+        </div>
+      </div>
+
+      <p>
+        The Paper Trading panel is on the main signal dashboard (<code>/</code>). It gives you a virtual $10,000 account that trades at actual live prices, so you can test a strategy or a signal without committing real money.
+      </p>
+
+      <h3>Account settings</h3>
+      <table>
+        <thead><tr><th>Setting</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Auto-take every pick</strong></td><td>When checked, the system automatically opens a paper position whenever the dashboard generates a BUY signal for the current ticker</td></tr>
+          <tr><td><strong>Budget $</strong></td><td>Dollar amount to allocate per trade</td></tr>
+          <tr><td><strong>Target $</strong></td><td>Profit target per trade (triggers a nudge to close)</td></tr>
+          <tr><td><strong>Risk</strong></td><td>Cautious / Balanced / Aggressive — controls the stop-loss tightness</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Opening a position manually</h3>
+      <ol class="steps">
+        <li>Load a ticker on the signal dashboard.</li>
+        <li>In the Paper Trading panel, confirm the budget and risk settings.</li>
+        <li>The Goal Planner section (just above Paper Trading) can help you find tickers where your profit target is realistic — click any result's <strong>Paper Trade</strong> button to pre-load it.</li>
+        <li>Once auto-mode is on, or via the analyst report's <em>Place Paper Trade</em> button, the order opens at the current live price.</li>
+      </ol>
+
+      <h3>Open positions</h3>
+      <p>Each open position shows: symbol, shares, entry price, live price, and unrealized P&amp;L in real time. Two action buttons are available:</p>
+      <ul>
+        <li><strong>Analyst</strong> — opens an AI research report for the position's ticker in a new tab</li>
+        <li><strong>Close</strong> — closes the position at the current live price and records the trade in history</li>
+      </ul>
+
+      <h3>Trade history</h3>
+      <p>Closed trades appear below the open positions with entry price, exit price, shares, and realized P&amp;L. Win rate and aggregate realized P&amp;L are shown in the account summary bar.</p>
+
+      <h3>Resetting the account</h3>
+      <p>Click <strong>Reset account</strong> to wipe all positions and history and return to the starting $10,000 balance. This is permanent — there is no undo.</p>
+    </div>
+
+    <!-- ── PINE SCRIPT BRIDGE ── -->
+    <div class="section" id="pine">
+      <div class="section-hero">
+        <div class="icon">🌲</div>
+        <div>
+          <h2>Pine Script / TradingView Bridge</h2>
+          <div class="sub">Route TradingView alerts into the paper book — automatically or with approval</div>
+        </div>
+      </div>
+
+      <p>
+        The Pine Script Bridge lets you connect a TradingView strategy to the paper trading book. When your Pine Script fires an alert, it sends a webhook to this platform. Depending on your settings, the trade either executes immediately or is queued for your approval.
+      </p>
+
+      <h3>Step 1 — Configure the bridge settings</h3>
+      <p>Expand the <strong>Pine Script / TradingView Signals</strong> section in the Paper Trading panel on the dashboard:</p>
+      <table>
+        <thead><tr><th>Setting</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Enable auto-trading from Pine alerts</strong></td>
+            <td>Master on/off switch. Must be checked for any signals to be processed.</td>
+          </tr>
+          <tr>
+            <td><strong>Auto mode</strong></td>
+            <td>Signals execute immediately as paper trades the moment the alert fires.</td>
+          </tr>
+          <tr>
+            <td><strong>Approval mode</strong></td>
+            <td>Signals are queued for your review. A "Pending Pine Signals" panel appears — you approve or reject each one manually.</td>
+          </tr>
+          <tr>
+            <td><strong>When already holding the ticker</strong></td>
+            <td>
+              <strong>Skip</strong> — ignore the duplicate signal (default for most strategies)<br/>
+              <strong>Stack</strong> — open a second independent position<br/>
+              <strong>Scale</strong> — add to the existing position at the new price
+            </td>
+          </tr>
+          <tr>
+            <td><strong>On EXIT / SELL signal</strong></td>
+            <td>
+              <strong>Close all</strong> — close every open position for that ticker<br/>
+              <strong>Close most recent</strong> — close only the newest position<br/>
+              <strong>Ignore</strong> — do not close automatically (manual only)
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Trade budget $</strong></td>
+            <td>Dollar amount allocated per Pine-triggered trade. Separate from the manual paper trading budget.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Step 2 — Set up the TradingView webhook</h3>
+      <p>In TradingView, open your Pine Script strategy or study → <strong>Alert</strong> dialog → set <strong>Webhook URL</strong> to:</p>
+      <pre>http://&lt;your-server&gt;/api/tv/webhook</pre>
+      <p>Set the <strong>Message</strong> to a JSON payload with this format:</p>
+      <pre>{
+  "symbol":   "{{ticker}}",
+  "action":   "buy",
+  "price":    {{close}},
+  "strategy": "My Strategy Name"
+}</pre>
+      <div class="callout">
+        <strong>Accepted values for <code>action</code>:</strong><br/>
+        <code>buy</code> or <code>long</code> — opens a long paper position<br/>
+        <code>sell</code>, <code>short</code>, or <code>exit</code> — triggers the EXIT behaviour you configured above
+      </div>
+
+      <h3>Step 3 — Approve or auto-execute</h3>
+      <p>Once a signal arrives:</p>
+      <ul>
+        <li><strong>Auto mode</strong> — the paper trade appears in open positions immediately. Target is set to +6% above entry, stop to −3% below entry.</li>
+        <li><strong>Approval mode</strong> — the signal appears in the <em>Pending Pine Signals</em> panel (yellow count badge). Click <strong>Approve</strong> to execute or <strong>Reject</strong> to discard. The panel refreshes every 15 seconds.</li>
+      </ul>
+
+      <div class="callout tip">
+        <strong>Best practice for live testing:</strong> start with Approval mode so you can review each signal before it executes. Once you are confident the strategy is firing correctly, switch to Auto for hands-off operation.
+      </div>
+
+      <h3>What happens when a signal fires (Auto mode)</h3>
+      <table>
+        <thead><tr><th>Signal type</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>BUY</strong> — no existing position</td>
+            <td>Opens a paper long at the signal price. Budget = Pine trade budget. Target = price × 1.06. Stop = price × 0.97.</td>
+          </tr>
+          <tr>
+            <td><strong>BUY</strong> — existing position, onDuplicate = skip</td>
+            <td>Signal is silently discarded. No second position opened.</td>
+          </tr>
+          <tr>
+            <td><strong>BUY</strong> — existing position, onDuplicate = stack</td>
+            <td>A second independent position is opened for the same ticker.</td>
+          </tr>
+          <tr>
+            <td><strong>SELL / EXIT</strong> — onExit = closeAll</td>
+            <td>Every open paper position for that ticker is closed at current price.</td>
+          </tr>
+          <tr>
+            <td><strong>SELL / EXIT</strong> — onExit = closeLatest</td>
+            <td>Only the most recently opened position for that ticker is closed.</td>
+          </tr>
+          <tr>
+            <td><strong>SELL / EXIT</strong> — onExit = ignore</td>
+            <td>No automatic close. You must close positions manually.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── READING SIGNALS ── -->
+    <div class="section" id="reading-signals">
+      <div class="section-hero">
+        <div class="icon">🎯</div>
+        <div>
+          <h2>Reading signals</h2>
+          <div class="sub">What each output means and how to use it</div>
+        </div>
+      </div>
+
+      <h3>Market signal (the stock)</h3>
+      <table>
+        <thead><tr><th>Signal</th><th>Score</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="badge buy">BUY / LONG</span></td>
+            <td>≥ 64</td>
+            <td>Multiple indicators align bullishly. Favourable structure for a long entry — but confirm at the entry / exit plan levels before acting.</td>
+          </tr>
+          <tr>
+            <td><span class="badge sell">SELL / SHORT</span></td>
+            <td>≤ 36</td>
+            <td>Bearish confluence. Favours reducing or exiting a long, or entering short. Verify against your own thesis before acting.</td>
+          </tr>
+          <tr>
+            <td><span class="badge wait">WAIT</span></td>
+            <td>37–63</td>
+            <td>No clean edge. Mixed or conflicting signals — the model recommends staying out until structure improves.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Personalized position call</h3>
+      <table>
+        <thead><tr><th>Call</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge buy">HOLD</span></td><td>Trend still supports the position — no action needed.</td></tr>
+          <tr><td><span class="badge buy">HOLD / ADD</span></td><td>Bullish signal while you are underwater — hold, only add with a plan.</td></tr>
+          <tr><td><span class="badge buy">TAKE PROFIT</span></td><td>Price reached your target zone — consider locking gains.</td></tr>
+          <tr><td><span class="badge sell">SELL / TRIM</span></td><td>Bearish signal while you are in profit — protect gains.</td></tr>
+          <tr><td><span class="badge sell">REDUCE / TIGHTEN STOP</span></td><td>Bearish while you are down — cut exposure or tighten your stop.</td></tr>
+          <tr><td><span class="badge sell">CUT LOSS</span></td><td>Price hit your stop zone — close the position.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Analyst report verdicts</h3>
+      <table>
+        <thead><tr><th>Verdict</th><th>Confidence</th><th>Interpretation</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="badge buy">BUY</span></td>
+            <td>≥ 80%</td>
+            <td>Strong fundamental and technical alignment. AI analysis and quantitative signals agree. Worth a closer look for a long position.</td>
+          </tr>
+          <tr>
+            <td><span class="badge wait">HOLD</span></td>
+            <td>50–79%</td>
+            <td>Mixed signals. The stock may be fairly valued or in a neutral technical zone. Watch rather than act.</td>
+          </tr>
+          <tr>
+            <td><span class="badge sell">SELL</span></td>
+            <td>Any</td>
+            <td>Bearish fundamental or technical factors outweigh positives. Consider reducing or exiting exposure.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Signal latency:</strong> WebSocket data streams in real time during market hours (9:30 AM – 4:00 PM ET). Outside market hours the chart uses the most recent session's closing candles and indicators are computed from that data. The signal box will reflect the after-hours status.
+      </div>
+
+      <h3>Indicator reference</h3>
+      <table>
+        <thead><tr><th>Indicator</th><th>What to look for</th></tr></thead>
+        <tbody>
+          <tr><td>RSI 14</td><td>&gt; 70 = overbought (potential reversal); &lt; 30 = oversold (potential bounce); 40–60 = neutral.</td></tr>
+          <tr><td>MACD histogram</td><td>Positive and growing = bullish momentum. Negative = bearish. Watch for crossovers.</td></tr>
+          <tr><td>EMA 9 / 20 / 50</td><td>Price above all three EMAs in ascending order = bullish trend. Price below = bearish.</td></tr>
+          <tr><td>VWAP</td><td>Price above VWAP intraday = institutional buying. Below = selling pressure.</td></tr>
+          <tr><td>Supertrend</td><td>Green (below price) = uptrend. Red (above price) = downtrend.</td></tr>
+          <tr><td>Bollinger Bands</td><td>Price near upper band = extended / possible mean-reversion. Near lower = oversold zone.</td></tr>
+          <tr><td>ATR 14</td><td>Measures volatility. Use to size positions and set stop distances.</td></tr>
+          <tr><td>Volume pulse</td><td>High = conviction behind the move. Low volume on a breakout = weak signal.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Admin / system health</h3>
+      <p>
+        Visit <code>/admin.html</code> to check live connector status, cache hit rate, average report time, and request/error history. This is useful before a client meeting to verify all data feeds are healthy.
+      </p>
+      <p>FMP (Financial Modeling Prep) has a free-tier limit of 250 calls per day, supporting approximately 40 full analyst reports. The admin page shows current quota usage.</p>
+    </div>
+
+    <!-- ── DISCLAIMER ── -->
+    <div class="section" id="disclaimer">
+      <div class="section-hero">
+        <div class="icon">⚠️</div>
+        <div>
+          <h2>Disclaimer</h2>
+          <div class="sub">Important limitations on the use of this platform</div>
+        </div>
+      </div>
+      <div class="callout warn">
+        <strong>This platform is for research and simulation purposes only.</strong>
+        Nothing on this platform constitutes personalised investment advice. All signals, analyst verdicts, confidence scores, and trade simulations are analytical tools intended to supplement — not replace — professional judgement.
+      </div>
+      <ul>
+        <li>Past signal performance does not guarantee future results.</li>
+        <li>Paper trading results may differ from live trading due to slippage, liquidity, and execution timing.</li>
+        <li>AI-generated text in research reports reflects the model's interpretation of available data and may contain errors.</li>
+        <li>All numbers (prices, ratios, revenue) come from third-party data feeds (Finnhub, Financial Modeling Prep, Yahoo Finance) and may be delayed or incomplete.</li>
+        <li>Always apply your own due diligence and comply with applicable regulations before making investment decisions on behalf of clients.</li>
+      </ul>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // Highlight active nav link based on scroll position
+  (function () {
+    var links = document.querySelectorAll('nav a[href^="#"]');
+    var sections = [];
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      var el = document.getElementById(id);
+      if (el) sections.push({ el: el, a: a });
+    });
+    function onScroll() {
+      var y = window.scrollY + 80;
+      var active = sections[0];
+      sections.forEach(function (s) { if (s.el.offsetTop <= y) active = s; });
+      links.forEach(function (a) { a.classList.remove('active'); });
+      if (active) active.a.classList.add('active');
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }());
+</script>
+</body>
+</html>
