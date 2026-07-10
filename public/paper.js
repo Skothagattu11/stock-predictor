@@ -139,8 +139,9 @@
      'pineEnabled','pineBudget'].forEach(function(id){
       var e = el(id); if (e) e.addEventListener('change', saveSettings);
     });
-    document.querySelectorAll('input[name="pineMode"],input[name="pineDup"],input[name="pineExit"]')
-      .forEach(function(e){ e.addEventListener('change', saveSettings); });
+    Array.prototype.forEach.call(
+      document.querySelectorAll('input[name="pineMode"],input[name="pineDup"],input[name="pineExit"]'),
+      function(e){ e.addEventListener('change', saveSettings); });
 
     el('paperReset').addEventListener('click', function(){
       if (confirm('Reset paper account to $10,000 and clear positions?'))
