@@ -375,14 +375,6 @@
     #paperReset{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
   </style>
 </head>
-<script>
-  // Auth gate — redirect to login if no session token present
-  (function() {
-    if (!localStorage.getItem('wm_token')) {
-      window.location.replace('/login.html?next=' + encodeURIComponent(location.pathname + location.search));
-    }
-  })();
-</script>
 <body>
   <div id="errorBanner" class="banner hidden"></div>
   <!-- Auth bar -->
@@ -541,6 +533,61 @@
             <option value="aggressive">Aggressive</option></select></label>
         <button id="paperReset">Reset account</button>
       </div>
+
+      <details id="pineSettings" style="margin-top:14px;border:1px solid var(--line);border-radius:9px;padding:10px 14px">
+        <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--text)">Pine Script / TradingView Signals</summary>
+        <div class="gp-controls" style="margin-top:10px;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="pineEnabled">
+            <span>Enable auto-trading from Pine alerts</span>
+          </label>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Execution mode</div>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <input type="radio" name="pineMode" id="pineModeAuto" value="auto">
+              Auto — execute immediately on signal
+            </label>
+            <label style="display:flex;align-items:center;gap:6px">
+              <input type="radio" name="pineMode" id="pineModeApproval" value="approval">
+              Approval — queue for my review
+            </label>
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">When already holding the ticker</div>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <input type="radio" name="pineDup" id="pineDupSkip" value="skip"> Skip — ignore duplicate signal
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <input type="radio" name="pineDup" id="pineDupStack" value="stack"> Stack — open another position
+            </label>
+            <label style="display:flex;align-items:center;gap:6px">
+              <input type="radio" name="pineDup" id="pineDupScale" value="scale"> Scale — add to existing position
+            </label>
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">On EXIT / SELL signal</div>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <input type="radio" name="pineExit" id="pineExitAll" value="closeAll"> Close all positions for that ticker
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <input type="radio" name="pineExit" id="pineExitLatest" value="closeLatest"> Close most recent position only
+            </label>
+            <label style="display:flex;align-items:center;gap:6px">
+              <input type="radio" name="pineExit" id="pineExitIgnore" value="ignore"> Ignore — manual close only
+            </label>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;color:var(--muted)">Trade budget $</span>
+            <input id="pineBudget" type="number" value="200" min="50" style="width:90px">
+          </label>
+        </div>
+      </details>
+
+      <div id="pinePending" style="display:none;margin-top:12px;border:1px solid var(--line);border-radius:9px;padding:10px 14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">Pending Pine Signals <span id="pinePendingCount" style="color:var(--amber)"></span></div>
+        <div id="pinePendingList"></div>
+      </div>
+
       <div id="paperOpen"></div>
       <div id="paperHistory"></div>
     </div></div>
