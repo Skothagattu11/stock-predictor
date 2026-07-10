@@ -74,13 +74,13 @@
           '<button data-reject="' + esc(sig.id) + '" style="background:var(--red);color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">Reject</button>' +
           '</span></div>';
       }).join('');
-      listEl.querySelectorAll('button[data-approve]').forEach(function(b){
+      Array.prototype.forEach.call(listEl.querySelectorAll('button[data-approve]'), function(b){
         b.addEventListener('click', function(){
           fetch('/api/tv/pending/' + encodeURIComponent(b.getAttribute('data-approve')) + '/approve', { method: 'POST' })
             .then(function(){ loadPending(); load(); });
         });
       });
-      listEl.querySelectorAll('button[data-reject]').forEach(function(b){
+      Array.prototype.forEach.call(listEl.querySelectorAll('button[data-reject]'), function(b){
         b.addEventListener('click', function(){
           fetch('/api/tv/pending/' + encodeURIComponent(b.getAttribute('data-reject')) + '/reject', { method: 'POST' })
             .then(function(){ loadPending(); });
