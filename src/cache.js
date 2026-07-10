@@ -12,6 +12,28 @@ class TtlCache {
     this._store.set(key, { value, expiresAt: this._now() + ttlMs });
   }
 
+  // Non-loading lookup of the entry's freshness: 'fresh' | 'stale' | 'miss'.
+  // Mirrors getOrLoad's branches so callers can label a served value hit/miss
+  // without racing the background revalidation.
+  peek(key) {
+    const now = this._now();
+    const entry = this._store.get(key);
+    if (!entry) return 'miss';
+    if (entry.expiresAt > now) return 'fresh';
+    if (entry.expiresAt + this._staleTtl > now) return 'stale';
+    return 'miss';
+  }
+
+  // Total stored entries (for observability). Includes not-yet-evicted stale entries.
+  size() { return this._store.size; }
+
+  // Count entries whose key starts with `prefix` (e.g. 'fmp:', 'analyst:').
+  sizeByPrefix(prefix) {
+    let n = 0;
+    for (const k of this._store.keys()) if (k.startsWith(prefix)) n++;
+    return n;
+  }
+
   getOrLoad(key, ttlMs, loader) {
     const now = this._now();
     const entry = this._store.get(key);
