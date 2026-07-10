@@ -14,6 +14,8 @@
     return String(+v.toFixed(2));
   }
   const confColor = (c) => (c >= 80 ? 'var(--green)' : c >= 50 ? 'var(--amber)' : 'var(--red)');
+  const fmtCross = (v) => ({ golden: 'Golden Cross', death: 'Death Cross', golden_active: 'Above 200-day (Golden)', death_active: 'Below 200-day (Death)', none: '—' }[v] || esc(v) || '—');
+  const fmtMacd = (v) => ({ bullish: 'Bullish crossover', bearish: 'Bearish crossover', above: 'Above signal', below: 'Below signal', none: '—' }[v] || esc(v) || '—');
 
   function showState(html, isErr) {
     const el = $('state');
@@ -93,8 +95,8 @@
             <div class="k">Setup</div><div class="v">${esc(tec.setup)}</div>
             ${tec.available ? `
             <div class="k">RSI (14)</div><div class="v">${num(tec.indicators && tec.indicators.rsi && tec.indicators.rsi.value)}</div>
-            <div class="k">MACD cross</div><div class="v">${esc(tec.indicators && tec.indicators.macd && tec.indicators.macd.crossover)}</div>
-            <div class="k">50/200 cross</div><div class="v">${esc(tec.indicators && tec.indicators.cross)}</div>
+            <div class="k">MACD cross</div><div class="v">${fmtMacd(tec.indicators && tec.indicators.macd && tec.indicators.macd.crossover)}</div>
+            <div class="k">50/200 cross</div><div class="v">${fmtCross(tec.indicators && tec.indicators.cross)}</div>
             <div class="k">Support</div><div class="v">${(tec.keyLevels && tec.keyLevels.support || []).map(num).join(', ') || '—'}</div>
             <div class="k">Resistance</div><div class="v">${(tec.keyLevels && tec.keyLevels.resistance || []).map(num).join(', ') || '—'}</div>` : ''}
           </div>
@@ -107,8 +109,7 @@
             <div style="margin-top:8px" class="sub">${esc(rec.confidenceJustification)}</div>
           </div>
         </div>
-      </div>
-      <div class="disc">${esc(d.disclaimer || '')}</div>`;
+      </div>`;
   }
 
   function renderComparison(results, rankedVerdict) {
