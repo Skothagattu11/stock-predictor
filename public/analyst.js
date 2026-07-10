@@ -34,6 +34,59 @@
     return items.map((x) => `<li>${esc(x)}</li>`).join('');
   }
 
+  // Ticker autocomplete — searches on the last comma-separated segment
+  (function () {
+    const inp = $('ticker-input');
+    const drop = $('tickerDrop');
+    if (!inp || !drop) return;
+    let timer = null;
+
+    function lastSegment() {
+      const parts = inp.value.split(',');
+      return parts[parts.length - 1].trim();
+    }
+
+    function pickResult(symbol) {
+      const parts = inp.value.split(',').map((s) => s.trim()).filter(Boolean);
+      parts[parts.length > 0 ? parts.length - 1 : 0] = symbol;
+      inp.value = parts.join(', ') + (parts.length > 1 ? '' : '');
+      drop.classList.remove('open');
+      drop.innerHTML = '';
+      inp.focus();
+    }
+
+    function showDrop(list) {
+      if (!list.length) { drop.classList.remove('open'); return; }
+      drop.innerHTML = list.slice(0, 8).map((r) =>
+        `<div class="ticker-item" data-sym="${esc(r.symbol)}"><b>${esc(r.symbol)}</b><span>${esc(r.description || '')}</span></div>`
+      ).join('');
+      drop.querySelectorAll('.ticker-item').forEach((el) => {
+        el.addEventListener('mousedown', (e) => { e.preventDefault(); pickResult(el.dataset.sym); });
+      });
+      drop.classList.add('open');
+    }
+
+    inp.addEventListener('input', () => {
+      const q = lastSegment();
+      clearTimeout(timer);
+      if (!q || q.length < 1) { drop.classList.remove('open'); return; }
+      timer = setTimeout(() => {
+        fetch('/api/search?q=' + encodeURIComponent(q))
+          .then((r) => r.ok ? r.json() : [])
+          .then((list) => showDrop(Array.isArray(list) ? list : []))
+          .catch(() => drop.classList.remove('open'));
+      }, 220);
+    });
+
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { drop.classList.remove('open'); }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!inp.contains(e.target) && !drop.contains(e.target)) drop.classList.remove('open');
+    });
+  }());
+
   function renderReport(d) {
     const r = d.report || {};
     const ov = r.overview || {}, fin = r.financials || {}, sr = r.strengthsRisks || {};
