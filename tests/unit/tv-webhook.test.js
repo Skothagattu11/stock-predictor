@@ -61,3 +61,140 @@ test('PendingQueue: isFull returns true when at cap', () => {
   q.add({ symbol: 'A', stance: 'bullish', action: 'buy', price: 1, strategy: 'S' });
   assert.equal(q.isFull(), true);
 });
+
+// ---------------------------------------------------------------------------
+// Task 2: executeSignal + new API routes
+// ---------------------------------------------------------------------------
+const { createTvStore, createTvRouter, normAction } = require('../../src/tv-webhook');
+const http = require('node:http');
+
+// Stub sidecar factory
+function makeSidecar(overrides = {}) {
+  const orders = [];
+  const closes = [];
+  const openPositions = overrides.openPositions || [];
+  return {
+    orders,
+    closes,
+    paperPortfolio: async () => ({ open: openPositions, account: {}, stats: {} }),
+    paperSettings: async () => ({ ...PINE_DEFAULTS, ...overrides.settings }),
+    paperOrder: async (body) => { orders.push(body); return { ok: true }; },
+    paperClose: async (id) => { closes.push(id); return { ok: true }; },
+  };
+}
+
+function makeRouter(sidecarOverrides = {}) {
+  const store = createTvStore();
+  const queue = new PendingQueue(50);
+  const sidecar = makeSidecar(sidecarOverrides);
+  const router = createTvRouter({ store, secret: null, sidecar, _queue: queue });
+  return { router, sidecar, queue };
+}
+
+function request(router, method, path, body) {
+  return new Promise((resolve) => {
+    const app = require('express')();
+    app.use(require('express').json());
+    app.use('/', router);
+    const srv = app.listen(0, () => {
+      const port = srv.address().port;
+      const data = body ? JSON.stringify(body) : null;
+      const req = http.request({ host: '127.0.0.1', port, method, path,
+        headers: { 'content-type': 'application/json', 'content-length': data ? Buffer.byteLength(data) : 0 }
+      }, (res) => {
+        let raw = '';
+        res.on('data', c => raw += c);
+        res.on('end', () => { srv.close(); resolve({ status: res.statusCode, body: JSON.parse(raw || 'null') }); });
+      });
+      if (data) req.write(data);
+      req.end();
+    });
+  });
+}
+
+test('webhook: pine disabled — no order placed', async () => {
+  const { router, sidecar } = makeRouter({ settings: { pine: { enabled: false } } });
+  await request(router, 'POST', '/webhook', { symbol: 'AAPL', action: 'buy', price: 200, strategy: 'Test' });
+  assert.equal(sidecar.orders.length, 0);
+});
+
+test('webhook: pine auto mode bullish — places order', async () => {
+  const { router, sidecar } = makeRouter({ settings: { pine: { enabled: true, mode: 'auto', onDuplicate: 'stack', onExit: 'ignore', tradeBudget: 200 } } });
+  const res = await request(router, 'POST', '/webhook', { symbol: 'NVDA', action: 'buy', price: 500, strategy: 'GC' });
+  assert.equal(res.status, 200);
+  assert.equal(sidecar.orders.length, 1);
+  assert.equal(sidecar.orders[0].symbol, 'NVDA');
+});
+
+test('webhook: pine auto mode onDuplicate=skip — skips when position exists', async () => {
+  const { router, sidecar } = makeRouter({
+    openPositions: [{ id: '1', symbol: 'AAPL' }],
+    settings: { pine: { enabled: true, mode: 'auto', onDuplicate: 'skip', onExit: 'ignore', tradeBudget: 200 } }
+  });
+  await request(router, 'POST', '/webhook', { symbol: 'AAPL', action: 'buy', price: 200, strategy: 'Test' });
+  assert.equal(sidecar.orders.length, 0);
+});
+
+test('webhook: pine auto mode onExit=closeAll — closes all matching positions', async () => {
+  const { router, sidecar } = makeRouter({
+    openPositions: [{ id: 'p1', symbol: 'TSLA' }, { id: 'p2', symbol: 'TSLA' }, { id: 'p3', symbol: 'AAPL' }],
+    settings: { pine: { enabled: true, mode: 'auto', onDuplicate: 'skip', onExit: 'closeAll', tradeBudget: 200 } }
+  });
+  await request(router, 'POST', '/webhook', { symbol: 'TSLA', action: 'sell', price: 100, strategy: 'Test' });
+  assert.equal(sidecar.closes.length, 2);
+  assert.ok(sidecar.closes.includes('p1'));
+  assert.ok(sidecar.closes.includes('p2'));
+});
+
+test('webhook: pine auto mode onExit=closeLatest — closes only most recent', async () => {
+  const { router, sidecar } = makeRouter({
+    openPositions: [{ id: 'p1', symbol: 'TSLA' }, { id: 'p2', symbol: 'TSLA' }],
+    settings: { pine: { enabled: true, mode: 'auto', onDuplicate: 'skip', onExit: 'closeLatest', tradeBudget: 200 } }
+  });
+  await request(router, 'POST', '/webhook', { symbol: 'TSLA', action: 'exit', price: 100, strategy: 'Test' });
+  assert.equal(sidecar.closes.length, 1);
+  assert.equal(sidecar.closes[0], 'p2');
+});
+
+test('webhook: pine approval mode — queues signal, no order', async () => {
+  const { router, sidecar, queue } = makeRouter({
+    settings: { pine: { enabled: true, mode: 'approval', onDuplicate: 'skip', onExit: 'closeAll', tradeBudget: 200 } }
+  });
+  await request(router, 'POST', '/webhook', { symbol: 'MSFT', action: 'buy', price: 300, strategy: 'Test' });
+  assert.equal(sidecar.orders.length, 0);
+  assert.equal(queue.list().length, 1);
+});
+
+test('GET /pending — returns queued signals', async () => {
+  const { router, queue } = makeRouter({ settings: { pine: { enabled: true, mode: 'approval', onDuplicate: 'skip', onExit: 'closeAll', tradeBudget: 200 } } });
+  queue.add({ symbol: 'AAPL', stance: 'bullish', action: 'buy', price: 200, strategy: 'T' });
+  const res = await request(router, 'GET', '/pending', null);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.length, 1);
+  assert.equal(res.body[0].symbol, 'AAPL');
+});
+
+test('POST /pending/:id/approve — executes and removes from queue', async () => {
+  const { router, sidecar, queue } = makeRouter({ settings: { pine: { enabled: true, mode: 'approval', onDuplicate: 'stack', onExit: 'closeAll', tradeBudget: 200 } } });
+  const entry = queue.add({ symbol: 'GOOGL', stance: 'bullish', action: 'buy', price: 150, strategy: 'T' });
+  const res = await request(router, 'POST', `/pending/${entry.id}/approve`, null);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(queue.list().length, 0);
+  assert.equal(sidecar.orders.length, 1);
+});
+
+test('POST /pending/:id/reject — removes without executing', async () => {
+  const { router, sidecar, queue } = makeRouter({ settings: { pine: { enabled: true, mode: 'approval', onDuplicate: 'skip', onExit: 'closeAll', tradeBudget: 200 } } });
+  const entry = queue.add({ symbol: 'GOOGL', stance: 'bullish', action: 'buy', price: 150, strategy: 'T' });
+  const res = await request(router, 'POST', `/pending/${entry.id}/reject`, null);
+  assert.equal(res.status, 200);
+  assert.equal(queue.list().length, 0);
+  assert.equal(sidecar.orders.length, 0);
+});
+
+test('POST /pending/:id/approve — 404 for unknown id', async () => {
+  const { router } = makeRouter();
+  const res = await request(router, 'POST', '/pending/no-such-id/approve', null);
+  assert.equal(res.status, 404);
+});

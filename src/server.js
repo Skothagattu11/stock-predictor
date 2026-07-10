@@ -122,7 +122,7 @@ const { createAlertsRouter } = require('./alerts-routes');
 
 // TradingView / Pine alerts -> a signal voice in the consensus.
 const tvStore = createTvStore();
-app.use('/api/tv', createTvRouter({ store: tvStore, secret: config.TV_WEBHOOK_SECRET }));
+app.use('/api/tv', createTvRouter({ store: tvStore, secret: config.TV_WEBHOOK_SECRET, sidecar }));
 
 // Email alerts (Resend) for position exit-plan target/stop hits. Emails are held
 // in memory only (never persisted); the browser re-subscribes each session.
