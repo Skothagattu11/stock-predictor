@@ -1,5 +1,40 @@
 'use strict';
 const express = require('express');
+const { randomUUID } = require('crypto');
+
+const PINE_DEFAULTS = {
+  enabled: false,
+  mode: 'auto',          // 'auto' | 'approval'
+  onDuplicate: 'skip',   // 'skip' | 'stack' | 'scale'
+  onExit: 'closeAll',    // 'closeAll' | 'closeLatest' | 'ignore'
+  tradeBudget: 200,      // dollars per auto-trade
+};
+
+class PendingQueue {
+  constructor(cap = 50) {
+    this._cap = cap;
+    this._items = [];
+  }
+  add(signal) {
+    if (this._items.length >= this._cap) this._items.shift();
+    const entry = { id: randomUUID(), ts: Date.now(), ...signal };
+    this._items.push(entry);
+    return entry;
+  }
+  list() { return this._items.slice(); }
+  approve(id) {
+    const idx = this._items.findIndex(e => e.id === id);
+    if (idx === -1) return null;
+    return this._items.splice(idx, 1)[0];
+  }
+  reject(id) {
+    const idx = this._items.findIndex(e => e.id === id);
+    if (idx === -1) return false;
+    this._items.splice(idx, 1);
+    return true;
+  }
+  isFull() { return this._items.length >= this._cap; }
+}
 
 // Map a TradingView/Pine alert action onto our stance vocabulary.
 function normAction(x) {
@@ -52,4 +87,4 @@ function createTvRouter({ store, secret }) {
   return router;
 }
 
-module.exports = { createTvStore, createTvRouter, normAction };
+module.exports = { createTvStore, createTvRouter, normAction, PendingQueue, PINE_DEFAULTS };
