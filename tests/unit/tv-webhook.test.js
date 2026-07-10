@@ -48,12 +48,13 @@ test('PendingQueue: approve returns null for unknown id', () => {
 
 test('PendingQueue: drops oldest when full', () => {
   const q = new PendingQueue(2);
-  q.add({ symbol: 'A', stance: 'bullish', action: 'buy', price: 1, strategy: 'S' });
+  const first = q.add({ symbol: 'A', stance: 'bullish', action: 'buy', price: 1, strategy: 'S' });
   const second = q.add({ symbol: 'B', stance: 'bullish', action: 'buy', price: 2, strategy: 'S' });
   q.add({ symbol: 'C', stance: 'bullish', action: 'buy', price: 3, strategy: 'S' });
   const ids = q.list().map(e => e.id);
-  assert.ok(!ids.includes(second.id) || ids.length === 2);
   assert.equal(q.list().length, 2);
+  assert.ok(!ids.includes(first.id), 'oldest entry (A) should have been dropped');
+  assert.ok(ids.includes(second.id), 'second entry (B) should still be in queue');
 });
 
 test('PendingQueue: isFull returns true when at cap', () => {

@@ -463,7 +463,7 @@
       <td style="font-size:12px">${targetStop}</td>
       <td class="pos-actions">
         <button class="btn sm" onclick="openSignalDash('${esc(p.symbol)}')" title="View on signal dashboard">📈</button>
-        <button class="btn sm" onclick="window.open('/analyst.html?ticker=${encodeURIComponent(p.symbol)}','_blank')" title="AI equity analyst report">Analyst</button>
+        <button class="btn sm" onclick="window.open('/analyst.html?ticker=${esc(p.symbol)}','_blank')" title="AI equity analyst report">Analyst</button>
         <button class="btn sm" onclick="openEditPosModal('${p.id}')" title="Edit position">Edit</button>
         <button class="btn sm danger" onclick="openSellModal('${p.id}','${esc(p.symbol)}',${livePrice ?? p.entry_price})" title="Close position">Sell</button>
         <button class="btn sm danger" onclick="deletePosition('${p.id}','${esc(p.symbol)}')" title="Delete position">✕</button>
@@ -505,7 +505,7 @@
           ${p.note ? `<div class="mob-field"><span>Note</span><b style="font-size:12px;font-weight:400">${esc(p.note)}</b></div>` : ''}
           <div class="mob-actions">
             <button class="btn sm" onclick="openSignalDash('${esc(p.symbol)}')">📈</button>
-            <button class="btn sm" onclick="window.open('/analyst.html?ticker=${encodeURIComponent(p.symbol)}','_blank')">Analyst</button>
+            <button class="btn sm" onclick="window.open('/analyst.html?ticker=${esc(p.symbol)}','_blank')">Analyst</button>
             <button class="btn sm" onclick="openEditPosModal('${p.id}')">Edit</button>
             <button class="btn sm danger" onclick="openSellModal('${p.id}','${esc(p.symbol)}',${livePrice ?? p.entry_price})">Sell</button>
             <button class="btn sm danger" onclick="deletePosition('${p.id}','${esc(p.symbol)}')">✕</button>
