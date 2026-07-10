@@ -166,4 +166,4 @@ function createTvRouter({ store, secret, sidecar, _queue } = {}) {
   return router;
 }
 
-module.exports = { createTvStore, createTvRouter, normAction, PendingQueue, PINE_DEFAULTS };
+module.exports = { createTvStore, createTvRouter, normAction, PendingQueue, PINE_DEFAULTS, executeSignal };

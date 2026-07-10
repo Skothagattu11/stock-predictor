@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { PendingQueue, PINE_DEFAULTS } = require('../../src/tv-webhook');
+const { PendingQueue, PINE_DEFAULTS, createTvStore, createTvRouter, normAction } = require('../../src/tv-webhook');
 
 test('PINE_DEFAULTS has expected shape', () => {
   assert.equal(PINE_DEFAULTS.enabled, false);
@@ -65,7 +65,6 @@ test('PendingQueue: isFull returns true when at cap', () => {
 // ---------------------------------------------------------------------------
 // Task 2: executeSignal + new API routes
 // ---------------------------------------------------------------------------
-const { createTvStore, createTvRouter, normAction } = require('../../src/tv-webhook');
 const http = require('node:http');
 
 // Stub sidecar factory
@@ -118,12 +117,15 @@ test('webhook: pine disabled — no order placed', async () => {
   assert.equal(sidecar.orders.length, 0);
 });
 
-test('webhook: pine auto mode bullish — places order', async () => {
+test('webhook: pine auto mode bullish — places order with correct target and stop', async () => {
   const { router, sidecar } = makeRouter({ settings: { pine: { enabled: true, mode: 'auto', onDuplicate: 'stack', onExit: 'ignore', tradeBudget: 200 } } });
   const res = await request(router, 'POST', '/webhook', { symbol: 'NVDA', action: 'buy', price: 500, strategy: 'GC' });
   assert.equal(res.status, 200);
   assert.equal(sidecar.orders.length, 1);
   assert.equal(sidecar.orders[0].symbol, 'NVDA');
+  assert.equal(sidecar.orders[0].budget, 200);
+  assert.equal(sidecar.orders[0].target, +(500 * 1.06).toFixed(2)); // 530
+  assert.equal(sidecar.orders[0].stop,   +(500 * 0.97).toFixed(2)); // 485
 });
 
 test('webhook: pine auto mode onDuplicate=skip — skips when position exists', async () => {
@@ -197,4 +199,22 @@ test('POST /pending/:id/approve — 404 for unknown id', async () => {
   const { router } = makeRouter();
   const res = await request(router, 'POST', '/pending/no-such-id/approve', null);
   assert.equal(res.status, 404);
+});
+
+test('webhook: pine auto mode onDuplicate=stack — places order even with existing position', async () => {
+  const { router, sidecar } = makeRouter({
+    openPositions: [{ id: '1', symbol: 'AAPL' }],
+    settings: { pine: { enabled: true, mode: 'auto', onDuplicate: 'stack', onExit: 'ignore', tradeBudget: 200 } }
+  });
+  await request(router, 'POST', '/webhook', { symbol: 'AAPL', action: 'buy', price: 200, strategy: 'Test' });
+  assert.equal(sidecar.orders.length, 1);
+});
+
+test('webhook: pine auto mode onExit=ignore — no close on bearish', async () => {
+  const { router, sidecar } = makeRouter({
+    openPositions: [{ id: 'p1', symbol: 'TSLA' }],
+    settings: { pine: { enabled: true, mode: 'auto', onDuplicate: 'skip', onExit: 'ignore', tradeBudget: 200 } }
+  });
+  await request(router, 'POST', '/webhook', { symbol: 'TSLA', action: 'sell', price: 100, strategy: 'Test' });
+  assert.equal(sidecar.closes.length, 0);
 });
