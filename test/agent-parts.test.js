@@ -44,3 +44,33 @@ test('parseDataUrl handles MediaRecorder-style params before base64 (e.g. codecs
     { mediaType: 'audio/webm', data: 'GkXfo0=' }
   );
 });
+
+test('image without prompt produces a valid message with no empty text part', () => {
+  const msg = buildParts({ image: PNG });
+  assert.equal(msg.role, 'user');
+  assert.equal(msg.content.length, 1);
+  assert.equal(msg.content[0].type, 'image');
+  // Ensure no invalid text part with undefined/missing text key
+  const textPart = msg.content.find(p => p.type === 'text');
+  assert.equal(textPart, undefined, 'should not include an empty text part');
+});
+
+test('audio without prompt produces a valid message with no empty text part', () => {
+  const msg = buildParts({ audio: WEBM });
+  assert.equal(msg.role, 'user');
+  assert.equal(msg.content.length, 1);
+  assert.equal(msg.content[0].type, 'file');
+  // Ensure no invalid text part with undefined/missing text key
+  const textPart = msg.content.find(p => p.type === 'text');
+  assert.equal(textPart, undefined, 'should not include an empty text part');
+});
+
+test('image and audio without prompt produces valid parts without empty text', () => {
+  const msg = buildParts({ image: PNG, audio: WEBM });
+  assert.equal(msg.role, 'user');
+  assert.equal(msg.content.length, 2);
+  assert.equal(msg.content[0].type, 'image');
+  assert.equal(msg.content[1].type, 'file');
+  const textPart = msg.content.find(p => p.type === 'text');
+  assert.equal(textPart, undefined, 'should not include an empty text part');
+});
