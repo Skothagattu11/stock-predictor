@@ -2,7 +2,7 @@
 const { generateObject } = require('ai');
 const { createGoogleGenerativeAI } = require('@ai-sdk/google');
 
-function createGoogleAdapter({ apiKey, model = 'gemini-2.5-flash' }) {
+function createGoogleAdapter({ apiKey, model = 'gemini-3.6-flash' }) {
   const provider = createGoogleGenerativeAI({ apiKey });
   return {
     name: 'gemini',

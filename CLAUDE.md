@@ -53,7 +53,7 @@ rows execute. **The agent never writes — only `manager-actions.js` does.**
   each owns its ownership check so callers cannot forget it.
 - **Migration**: `supabase-migration-agent.sql` (`agent_proposals`, plus
   `position_history.source` / `.proposal_id`)
-- **Model**: `GEMINI_MODEL` (default `gemini-2.5-flash`), Claude as failover.
+- **Model**: `GEMINI_MODEL` (default `gemini-3.6-flash` — 2.5 is retired for new keys), Claude as failover.
   Note the failover cannot accept audio — voice needs the primary.
 
 ### API routes — Agent (JWT required)
