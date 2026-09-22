@@ -214,3 +214,69 @@ test('execute rejects a null row instead of throwing', async () => {
   assert.equal(out.results[0].ok, false);
   assert.equal(out.results[1].ok, true);
 });
+
+// ── Finding 1: per-row re-validation snapshot conflates entity types ────────
+// The executor widens the snapshot passed to the per-row validatePlan call
+// with ids created earlier in the run, but must only widen the `clients`
+// list with created client ids and the `portfolios` list with created
+// portfolio ids — not both lists with every id regardless of kind. Otherwise
+// a later row can name a just-created portfolio's id as a clientId (literally,
+// or via "@ref" — the executor resolves "@ref" to the literal id before this
+// validation runs) and the executor's own re-validation wrongly calls it
+// valid, so the row falls through to manager-actions.js's ownedClient() check
+// and comes back as a generic "Client not found" instead of the executor's
+// own "clientId is not one of your records" — the executor is not actually
+// re-validating that row's target type.
+
+test('execute rejects a row that names a just-created portfolio id as a clientId, literally and via @ref', async () => {
+  const { service } = svc({ plan: basePlan([]) });
+  const out = await service.execute({ managerId: MANAGER, proposalId: 'prop-8', rows: [
+    { op: 'createPortfolio', ref: 'a1', dependsOn: null, target: { clientId: 'c1' }, fields: { name: 'Growth' } },
+    { op: 'updateClient', ref: 'a2', dependsOn: null, target: { clientId: 'new-client_portfolios-0' }, fields: { full_name: 'X' } },
+    { op: 'updateClient', ref: 'a3', dependsOn: null, target: { clientId: '@a1' }, fields: { full_name: 'Y' } },
+  ] });
+  assert.equal(out.results[0].ok, true);
+  // sanity check: row 2's literal id really is the id row 1 created.
+  assert.equal(out.results[0].data.id, 'new-client_portfolios-0');
+
+  assert.equal(out.results[1].ok, false);
+  assert.match(out.results[1].error, /clientId/);
+
+  assert.equal(out.results[2].ok, false);
+  assert.match(out.results[2].error, /clientId/);
+});
+
+// ── Finding 2: default buildParts fallback has the wrong shape ─────────────
+// toParts is called as toParts({ prompt, image, audio }) — a single object —
+// so the default (no buildParts injected) must return the bare prompt
+// string, not the whole object.
+
+test('parse sends the adapter a bare prompt string when no buildParts is injected', async () => {
+  const sb = seedSb();
+  let received;
+  const adapter = { name: 'stub', async generate(input) { received = input; return basePlan([]); } };
+  const service = createAgentService({ sb, adapter, actions: createManagerActions({ sb }), searchSymbols: async () => [] });
+  await service.parse({ managerId: MANAGER, text: 'hello' });
+  assert.equal(typeof received, 'string');
+});
+
+// ── Finding 3: rows beyond MAX_ACTIONS are silently dropped ────────────────
+// execute() slices rows to MAX_ACTIONS with no result entry for the dropped
+// rows. Every submitted row must be accounted for in the response.
+
+test('execute reports a failed result for every row beyond the per-proposal cap', async () => {
+  const { MAX_ACTIONS } = require('../src/agent-schema');
+  const { service } = svc({ plan: basePlan([]) });
+  const rows = [];
+  for (let i = 0; i < MAX_ACTIONS + 5; i++) {
+    rows.push({ op: 'addPosition', ref: `a${i}`, dependsOn: null, target: { portfolioId: 'p1' }, fields: { symbol: 'AAPL', entry_price: 10 } });
+  }
+  const out = await service.execute({ managerId: MANAGER, proposalId: 'prop-9', rows });
+  assert.equal(out.results.length, rows.length);
+  const dropped = out.results.slice(MAX_ACTIONS);
+  assert.equal(dropped.length, 5);
+  for (const r of dropped) {
+    assert.equal(r.ok, false);
+    assert.match(r.error, /limit/i);
+  }
+});

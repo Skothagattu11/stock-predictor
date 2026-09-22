@@ -33,8 +33,25 @@ function systemPrompt(snapshot, context) {
   ].join('\n');
 }
 
+// Which target-id kind each op mints, mirroring agent-schema.js's PRODUCES —
+// used only to keep the executor's per-row snapshot-widening scoped to the
+// right list (see execute()'s createdByKind below).
+const KIND_BY_OP = { createClient: 'clientId', createPortfolio: 'portfolioId' };
+
+// A row that never got a chance to run because the proposal exceeded
+// MAX_ACTIONS — every submitted row must show up in the response, not just
+// the ones under the cap.
+function capExceededResult(row) {
+  return {
+    ref: row && typeof row === 'object' ? row.ref : undefined,
+    op: row && typeof row === 'object' ? row.op : undefined,
+    ok: false,
+    error: `Exceeded the ${MAX_ACTIONS}-action limit per proposal — this row was not executed.`,
+  };
+}
+
 function createAgentService({ sb, adapter, actions, searchSymbols, buildParts }) {
-  const toParts = buildParts || ((prompt) => prompt);
+  const toParts = buildParts || (({ prompt }) => prompt);
 
   // ── snapshot ────────────────────────────────────────────────────────────
   // Ids and names only. No prices, no share counts — the model never needs the
@@ -154,8 +171,13 @@ function createAgentService({ sb, adapter, actions, searchSymbols, buildParts })
   // second row of the same ref.
   async function execute({ managerId, proposalId, rows }) {
     const snapshot = await buildSnapshot(managerId);
-    const list = Array.isArray(rows) ? rows.slice(0, MAX_ACTIONS) : [];
-    const created = new Map();     // ref -> created id
+    const allRows = Array.isArray(rows) ? rows : [];
+    const list = allRows.slice(0, MAX_ACTIONS);
+    const created = new Map();     // ref -> created id, any kind (for @ref resolution)
+    // created ids split by kind — used only to widen the per-row validatePlan
+    // snapshot below, so a client id can't be mistaken for a portfolio id (or
+    // vice versa) just because both were created earlier in this run.
+    const createdByKind = { clientId: new Set(), portfolioId: new Set() };
     const failed = new Set();      // refs that failed, so dependents are skipped
     const seenRefs = new Set();    // refs already processed in this run
     const results = [];
@@ -199,8 +221,8 @@ function createAgentService({ sb, adapter, actions, searchSymbols, buildParts })
       // ids and field shape.
       const single = { ...row, target, dependsOn: null };
       const { actions: [checked] } = validatePlan({ actions: [single] }, {
-        clients: [...snapshot.clients, ...[...created.values()].map((id) => ({ id }))],
-        portfolios: [...snapshot.portfolios, ...[...created.values()].map((id) => ({ id }))],
+        clients: [...snapshot.clients, ...[...createdByKind.clientId].map((id) => ({ id }))],
+        portfolios: [...snapshot.portfolios, ...[...createdByKind.portfolioId].map((id) => ({ id }))],
         positions: snapshot.positions,
       });
 
@@ -229,13 +251,19 @@ function createAgentService({ sb, adapter, actions, searchSymbols, buildParts })
 
       const out = await fn(managerId, input);
       if (out.ok) {
-        if (out.data && out.data.id) created.set(row.ref, out.data.id);
+        if (out.data && out.data.id) {
+          created.set(row.ref, out.data.id);
+          const kind = KIND_BY_OP[row.op];
+          if (kind) createdByKind[kind].add(out.data.id);
+        }
         results.push({ ref: row.ref, op: row.op, ok: true, data: out.data });
       } else {
         failed.add(row.ref);
         results.push({ ref: row.ref, op: row.op, ok: false, error: out.error });
       }
     }
+
+    results.push(...allRows.slice(MAX_ACTIONS).map(capExceededResult));
 
     if (proposalId) {
       await sb.from('agent_proposals')
