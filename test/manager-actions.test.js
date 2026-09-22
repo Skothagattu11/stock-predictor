@@ -270,3 +270,45 @@ test('deletePosition rejects a position belonging to a different manager', async
   assert.equal(r.ok, false);
   assert.equal(r.code, 404);
 });
+
+// ── Finding 4: a failed history insert must never be silent ───────────────
+// history() used to `await` its insert and discard `{ error }`. A failed
+// audit-trail write must surface to the caller instead of coming back as a
+// plain { ok: true } — and for sellPosition specifically, the SELL record is
+// written before the position is deleted, so the delete must never run when
+// that write failed (otherwise the position vanishes with no trace it ever
+// existed).
+
+test('addPosition surfaces a failed history insert instead of silently succeeding', async () => {
+  const sb = seed();
+  sb_position_history_fails(sb);
+  const actions = createManagerActions({ sb });
+  const r = await actions.addPosition(MANAGER, { portfolioId: 'p1', symbol: 'AAPL', entry_price: 10 });
+  assert.equal(r.ok, false);
+});
+
+test('updatePosition surfaces a failed history insert instead of silently succeeding', async () => {
+  const sb = seed();
+  sb_position_history_fails(sb);
+  const actions = createManagerActions({ sb });
+  const r = await actions.updatePosition(MANAGER, { positionId: 'pos1', entry_price: 120 });
+  assert.equal(r.ok, false);
+});
+
+test('sellPosition aborts BEFORE deleting the position when the history insert fails', async () => {
+  const sb = seed();
+  sb_position_history_fails(sb);
+  const actions = createManagerActions({ sb });
+  const r = await actions.sellPosition(MANAGER, { positionId: 'pos1', sell_price: 150 });
+  assert.equal(r.ok, false);
+  assert.ok(
+    !sb.calls.some((c) => c.op === 'delete' && c.table === 'portfolio_positions'),
+    'the position must not be deleted when its SELL audit record failed to write'
+  );
+});
+
+// Reseeds a fake Supabase's position_history table so every insert against it
+// fails, without disturbing any other table the fixture already carries.
+function sb_position_history_fails(sb) {
+  sb.tables.position_history = { error: { message: 'audit trail unavailable' } };
+}

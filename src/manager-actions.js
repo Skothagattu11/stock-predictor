@@ -34,8 +34,11 @@ function createManagerActions({ sb }) {
     return data || null;
   }
 
+  // Returns the insert's error rather than discarding it. The audit trail is not
+  // optional: a caller that cannot record what it did must say so, and
+  // sellPosition must not delete a position whose SELL record failed to write.
   async function history(row) {
-    await sb.from('position_history').insert({
+    const { error } = await sb.from('position_history').insert({
       source: row.source || 'manual',
       proposal_id: row.proposalId || null,
       position_id: row.position_id,
@@ -48,9 +51,13 @@ function createManagerActions({ sb }) {
       gain_pct: row.gain_pct == null ? null : row.gain_pct,
       note: row.note || null,
     });
+    return error || null;
   }
 
   const num = (v) => (v === '' || v == null ? null : Number(v));
+
+  // The position columns that must reach the DB as numbers, not raw input.
+  const NUMERIC_KEYS = new Set(['entry_price', 'shares', 'avg_cost', 'target_sell_price', 'stop_loss_price']);
 
   // ── clients ─────────────────────────────────────────────────────────────
   async function createClient(managerId, input = {}) {
@@ -131,11 +138,12 @@ function createManagerActions({ sb }) {
     }).select().single();
     if (error) return fail(500, error.message);
 
-    await history({
+    const histErr = await history({
       position_id: pos.id, portfolio_id: input.portfolioId, symbol,
       event_type: 'BUY', price: entry, shares, note: input.note,
       source: input.source, proposalId: input.proposalId,
     });
+    if (histErr) return fail(500, `Position saved but its audit record failed: ${histErr.message}`);
     return done(pos);
   }
 
@@ -146,7 +154,13 @@ function createManagerActions({ sb }) {
 
     const allowed = ['entry_price', 'shares', 'avg_cost', 'target_sell_price', 'stop_loss_price', 'note'];
     const updates = { updated_at: new Date().toISOString() };
-    for (const k of allowed) if (input[k] !== undefined) updates[k] = input[k];
+    // Coerce the numeric keys like every other write path does. Without this an
+    // empty string passes the schema (Number('') === 0) and reaches a numeric
+    // column verbatim, which PostgREST rejects as a 500 rather than a clean 400.
+    for (const k of allowed) {
+      if (input[k] === undefined) continue;
+      updates[k] = NUMERIC_KEYS.has(k) ? num(input[k]) : input[k];
+    }
 
     const { data, error } = await sb.from('portfolio_positions')
       .update(updates).eq('id', input.positionId).select().single();
@@ -154,11 +168,12 @@ function createManagerActions({ sb }) {
 
     const price = input.entry_price != null ? num(input.entry_price) : pos.entry_price;
     const shares = input.shares != null ? num(input.shares) : pos.shares;
-    await history({
+    const histErr = await history({
       position_id: pos.id, portfolio_id: pos.portfolio_id, symbol: pos.symbol,
       event_type: 'REBALANCE', price, shares, note: input.note || 'Position updated',
       source: input.source, proposalId: input.proposalId,
     });
+    if (histErr) return fail(500, `Position updated but its audit record failed: ${histErr.message}`);
     return done(data);
   }
 
@@ -171,11 +186,14 @@ function createManagerActions({ sb }) {
     if (!(sell > 0)) return fail(400, 'sell_price must be positive');
     const gain_pct = pos.entry_price ? ((sell - pos.entry_price) / pos.entry_price) * 100 : 0;
 
-    await history({
+    // Write the audit record FIRST and abort on failure. Deleting a position
+    // whose SELL record never landed erases it with no trace it existed.
+    const histErr = await history({
       position_id: pos.id, portfolio_id: pos.portfolio_id, symbol: pos.symbol,
       event_type: 'SELL', price: sell, shares: pos.shares, gain_pct, note: input.note,
       source: input.source, proposalId: input.proposalId,
     });
+    if (histErr) return fail(500, `Could not record the sale, so the position was left untouched: ${histErr.message}`);
 
     const { error } = await sb.from('portfolio_positions').delete().eq('id', input.positionId);
     if (error) return fail(500, error.message);

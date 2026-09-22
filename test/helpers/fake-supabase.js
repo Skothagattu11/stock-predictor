@@ -28,28 +28,39 @@ function fakeSupabase(tables = {}) {
       });
     }
 
+    // A table can be seeded as a plain array of rows (the normal case) or, to
+    // simulate a DB-level failure (e.g. a failed position_history insert), as
+    // `{ error: { message: '...' } }` — every operation against that table
+    // then returns that error instead of succeeding.
+    const seeded = tables[state.table];
+    const forcedError = seeded && !Array.isArray(seeded) ? seeded.error : null;
+
     function resolve() {
-      const rows = (tables[state.table] || []).filter(matches);
+      if (forcedError) {
+        calls.push({ op: state.op, table: state.table, row: state.payload, filters: { ...state.filters } });
+        return { data: null, error: forcedError, rows: [] };
+      }
+      const rows = (Array.isArray(seeded) ? seeded : []).filter(matches);
       if (state.op === 'insert') {
         const created = { id: `new-${state.table}-${calls.length}`, ...state.payload };
         calls.push({ op: 'insert', table: state.table, row: state.payload });
         // Persist it, so a later query in the same test finds it — the executor
         // threads created ids into dependent rows and re-checks ownership.
-        if (!tables[state.table]) tables[state.table] = [];
+        if (!Array.isArray(tables[state.table])) tables[state.table] = [];
         tables[state.table].push(created);
-        return { data: created, rows: [created] };
+        return { data: created, error: null, rows: [created] };
       }
       if (state.op === 'update') {
         calls.push({ op: 'update', table: state.table, row: state.payload, filters: { ...state.filters } });
-        if (!rows.length) return { data: null, rows: [] };
+        if (!rows.length) return { data: null, error: null, rows: [] };
         const updated = { ...rows[0], ...state.payload };
-        return { data: updated, rows: [updated] };
+        return { data: updated, error: null, rows: [updated] };
       }
       if (state.op === 'delete') {
         calls.push({ op: 'delete', table: state.table, filters: { ...state.filters } });
-        return { data: null, rows: [] };
+        return { data: null, error: null, rows: [] };
       }
-      return { data: rows[0] || null, rows };
+      return { data: rows[0] || null, error: null, rows };
     }
 
     const api = {
@@ -61,7 +72,8 @@ function fakeSupabase(tables = {}) {
       update(payload) { state.op = 'update'; state.payload = payload; return api; },
       delete() { state.op = 'delete'; return api; },
       async single() {
-        const { data } = resolve();
+        const { data, error } = resolve();
+        if (error) return { data: null, error };
         // A zero-match update() resolves to null data with no error — that is
         // what manager-actions.js's `if (!data) return fail(404, ...)` branches
         // are written to expect (see updateClient). A zero-match select still
@@ -71,14 +83,17 @@ function fakeSupabase(tables = {}) {
         return { data, error: null };
       },
       then(onOk, onErr) {
-        const { rows } = resolve();
-        return Promise.resolve({ data: rows, error: null }).then(onOk, onErr);
+        const { rows, error } = resolve();
+        return Promise.resolve({ data: rows, error: error || null }).then(onOk, onErr);
       },
     };
     return api;
   }
 
-  return { from, calls };
+  // `tables` is exposed so a test can swap one table for a forced-error shape
+  // after construction (see sb_position_history_fails in manager-actions.test.js).
+  // It is read per call inside from(), so a later mutation takes effect.
+  return { from, calls, tables };
 }
 
 module.exports = { fakeSupabase };
