@@ -121,3 +121,93 @@ All numeric data — ratios, indicators, prices — comes from live market data 
 ## Disclaimer
 
 Reports are for research purposes and do not constitute personalised investment advice. Always apply your own judgement before making investment decisions on behalf of clients.
+
+
+---
+
+# Agent entry — describe a change instead of filling in forms
+
+The composer bar sits at the bottom of the Wealth Manager. Type a change, attach
+or paste a screenshot, or record a voice note. **Nothing is saved until you
+approve it**, line by line.
+
+## Typing
+
+With a client and portfolio selected, this is enough:
+
+```
+bought 12 MSFT at 410.25
+```
+
+Name the client if none is selected: `bought 12 MSFT at 410.25 for Jane Smith`.
+
+You can describe several changes at once, and mix kinds:
+
+```
+sold all of Jane's NVDA at 190 and set her risk profile to aggressive
+```
+
+## Screenshots
+
+Click **📎** to choose an image, or press **Ctrl+V** with a screenshot on the
+clipboard. A brokerage holdings table usually becomes one row per holding.
+
+The image is shrunk inside your browser before it is sent, so a large screenshot
+does not mean a slow upload. Drag-and-drop is not supported — use the button or
+paste.
+
+A very long full-page capture is worth avoiding: the image is scaled to fit a
+fixed size, so an extremely tall screenshot can shrink the prices past what the
+reader can make out. A normal window capture, or two shorter ones, works better.
+
+## Voice
+
+Tap **🎙**, speak, tap it again to stop. Recording stops on its own after two
+minutes. The transcript of what was heard appears above the composer, so you can
+check it before approving anything.
+
+## Reviewing what it proposes
+
+Every proposal is a row showing the change, its values, and the words or part of
+the image it came from. You can edit any value directly in the row, and untick
+anything you don't want. **Apply selected** runs only the ticked rows.
+
+- **Amber row** — the reader is not confident. Check the values before applying.
+  If the row offers a *which record* dropdown, the name you used matched more
+  than one client; pick the right one.
+- **Red row** — something is wrong, and the reason is shown on the row (an
+  unrecognised ticker, a missing price). Red rows arrive unticked. You can tick
+  one anyway, but it will be refused when you apply it and the reason will be
+  shown — fix the values in the row instead.
+
+Rows are applied one at a time, and each reports its own result. If one fails the
+others still go through, so a single bad row never costs you the rest.
+
+If it cannot tell which client or portfolio you meant, it asks. Type the answer
+and press Enter — you do not need to retype the original note or attach the
+screenshot again.
+
+## What it can and cannot do
+
+It can create, update and delete clients, create portfolios, and add, edit, sell
+and remove positions.
+
+It **cannot delete a whole portfolio** — that is deliberate, and stays a manual
+action.
+
+Everything it applies is recorded in the portfolio history exactly like a manual
+entry, and marked as agent-entered, so the audit trail always shows how a change
+was made.
+
+## Known limitations
+
+- **Voice depends on the reader accepting your browser's recording format.** This
+  has not yet been confirmed against a live account. If a recording is refused,
+  the composer tells you and keeps it — nothing is lost, and you can type the
+  note instead.
+- **If the primary reader is unavailable**, typed entry and screenshots fall back
+  to a second one automatically, but voice notes do not — the fallback cannot
+  listen to audio. Type the note in that case.
+- The reader can misread a number on a screenshot, particularly a cost basis.
+  This is exactly why every row is shown to you with the text it came from, and
+  why nothing is saved until you approve it. Check the figures before applying.

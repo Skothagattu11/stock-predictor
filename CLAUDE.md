@@ -29,6 +29,40 @@ Live candlestick pattern signal dashboard (Finnhub WebSocket + Yahoo Finance) wi
 - **Auth middleware**: `src/auth-middleware.js` (Supabase JWT verification)
 - **Supabase client**: `src/supabase.js` (service role, server-side only)
 
+### Added: Agent entry (composer + proposal drawer)
+
+A manager describes a change (text), attaches/pastes a screenshot, or records a
+voice note; a model proposes actions; the manager reviews/edits rows; approved
+rows execute. **The agent never writes — only `manager-actions.js` does.**
+
+- **UI**: `public/agent.js` + composer/drawer markup in `public/manager.html`
+  (both live in one fixed `.agent-dock` flex column — do NOT re-introduce a
+  hardcoded bottom offset, it covered the Apply button)
+- **Routes**: `src/agent-routes.js` at `/api/manager/agent`
+  - Mounted in `src/server.js` **BEFORE** the app-wide `express.json({limit:'64kb'})`,
+    because it carries base64 media and brings its own 12mb parser. `requireAuth`
+    runs before that parser, so an unauthenticated 12MB body is never buffered.
+- **Service**: `src/agent-service.js` — `buildSnapshot` / `parse` / `execute`
+- **Contract**: `src/agent-schema.js` — closed `op` enum, per-op required fields,
+  entity ids checked against the caller's own snapshot, `@ref` type-checking,
+  duplicate-ref and cycle rejection, 25-action cap
+- **Multimodal**: `src/agent-parts.js`; `src/llm/adapters/google.js` accepts
+  message parts as well as a prompt string
+- **Shared writes**: `src/manager-actions.js` — the 8 write operations, used by
+  BOTH the HTTP routes and the agent executor. **All new write paths go here**;
+  each owns its ownership check so callers cannot forget it.
+- **Migration**: `supabase-migration-agent.sql` (`agent_proposals`, plus
+  `position_history.source` / `.proposal_id`)
+- **Model**: `GEMINI_MODEL` (default `gemini-2.5-flash`), Claude as failover.
+  Note the failover cannot accept audio — voice needs the primary.
+
+### API routes — Agent (JWT required)
+- `POST /api/manager/agent/parse` — `{ text?, image?, audio?, context? }` → proposal
+- `POST /api/manager/agent/execute` — `{ proposalId, rows }` → per-row results
+
+Rows posted to `/execute` are untrusted (the browser edits them) and are
+re-validated server-side before dispatch.
+
 ## Pages
 
 | URL | Description |
