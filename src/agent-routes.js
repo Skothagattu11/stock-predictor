@@ -18,7 +18,7 @@ function pickAdapters() {
     list.push(createGoogleAdapter({ apiKey: config.GEMINI_API_KEY, model: config.GEMINI_MODEL }));
   }
   if (config.ANTHROPIC_API_KEY) {
-    list.push(createAnthropicAdapter({ apiKey: config.ANTHROPIC_API_KEY }));
+    list.push(createAnthropicAdapter({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANTHROPIC_MODEL }));
   }
   return list;
 }
@@ -84,7 +84,7 @@ function createAgentRouter() {
       // once, and returns a normal result with an `errors` array. Anything
       // that reaches here is an infrastructure failure or a bug, not a model
       // outage, so it's always a plain server error.
-      console.error('[agent] parse failed:', err);
+      console.error('[agent] parse failed:', err.message);   // never the error object: it carries the prompt and any base64 media
       return res.status(500).json({ error: 'Internal error' });
     }
   });
@@ -98,7 +98,7 @@ function createAgentRouter() {
       const out = await serviceFor().execute({ managerId: req.user.id, proposalId, rows });
       return res.json(out);
     } catch (err) {
-      console.error('[agent] execute failed:', err);
+      console.error('[agent] execute failed:', err.message);
       return res.status(500).json({ error: 'Internal error' });
     }
   });

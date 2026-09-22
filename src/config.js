@@ -5,11 +5,12 @@ require('dotenv').config();
 
 const FINNHUB_API_KEY = (process.env.FINNHUB_API_KEY || '').trim();
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
-const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-3.6-flash').trim();
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const QUANT_SIDECAR_URL = (process.env.QUANT_SIDECAR_URL || '').trim();
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').trim();
 const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
+const ANTHROPIC_MODEL = (process.env.ANTHROPIC_MODEL || 'claude-sonnet-5').trim();
 const PERPLEXITY_API_KEY = (process.env.PERPLEXITY_API_KEY || '').trim();
 const FMP_API_KEY = (process.env.FMP_API_KEY || '').trim();
 const TV_WEBHOOK_SECRET = (process.env.TV_WEBHOOK_SECRET || '').trim();
@@ -27,6 +28,7 @@ module.exports = {
   QUANT_SIDECAR_URL,
   OPENAI_API_KEY,
   ANTHROPIC_API_KEY,
+  ANTHROPIC_MODEL,
   PERPLEXITY_API_KEY,
   FMP_API_KEY,
   TV_WEBHOOK_SECRET,
