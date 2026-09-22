@@ -78,7 +78,7 @@ function createManagerActions({ sb }) {
     if (!Object.keys(updates).length) return fail(400, 'no fields to update');
 
     const { data, error } = await sb.from('manager_clients')
-      .update(updates).eq('id', input.clientId).select().single();
+      .update(updates).eq('id', input.clientId).eq('manager_id', managerId).select().single();
     if (error) return fail(500, error.message);
     return done(data);
   }
@@ -87,7 +87,7 @@ function createManagerActions({ sb }) {
     if (!input.clientId) return fail(400, 'clientId required');
     if (!(await ownedClient(managerId, input.clientId))) return fail(404, 'Client not found');
 
-    const { error } = await sb.from('manager_clients').delete().eq('id', input.clientId);
+    const { error } = await sb.from('manager_clients').delete().eq('id', input.clientId).eq('manager_id', managerId);
     if (error) return fail(500, error.message);
     return done({ ok: true });
   }

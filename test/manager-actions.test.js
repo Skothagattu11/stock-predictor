@@ -146,6 +146,9 @@ test('updateClient updates allowed fields on an owned client', async () => {
   assert.equal(r.ok, true);
   assert.equal(r.data.full_name, 'Jane S.');
   assert.equal(r.data.risk_profile, 'aggressive');
+  const upd = sb.calls.find((c) => c.op === 'update' && c.table === 'manager_clients');
+  assert.equal(upd.filters.id, 'c1');
+  assert.equal(upd.filters.manager_id, MANAGER);
 });
 
 test('updateClient 404s on a nonexistent client', async () => {
@@ -177,7 +180,9 @@ test('deleteClient deletes an owned client', async () => {
   const actions = createManagerActions({ sb });
   const r = await actions.deleteClient(MANAGER, { clientId: 'c1' });
   assert.equal(r.ok, true);
-  assert.ok(sb.calls.some((c) => c.op === 'delete' && c.table === 'manager_clients' && c.filters.id === 'c1'));
+  const del = sb.calls.find((c) => c.op === 'delete' && c.table === 'manager_clients');
+  assert.equal(del.filters.id, 'c1');
+  assert.equal(del.filters.manager_id, MANAGER);
 });
 
 test('deleteClient rejects a client belonging to a different manager', async () => {
