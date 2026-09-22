@@ -14,9 +14,16 @@ function fakeSupabase(tables = {}) {
 
     function matches(row) {
       return Object.entries(state.filters).every(([col, val]) => {
-        // "a.b.c" filters (Supabase embedded-resource filters) are treated as
-        // satisfied — ownership in the real client is enforced by the join.
-        if (col.includes('.')) return true;
+        // "a.b.c" filters (Supabase embedded-resource filters) model a real join.
+        // A seeded row can declare the joined value directly under the dotted key
+        // (e.g. a client_portfolios row carrying 'manager_clients.manager_id') —
+        // when it does, match against that like any other column. When it
+        // doesn't, fall back to permissive (satisfied), since this stub doesn't
+        // implement a general-purpose join engine.
+        if (col.includes('.')) {
+          if (Object.prototype.hasOwnProperty.call(row, col)) return row[col] === val;
+          return true;
+        }
         return row[col] === val;
       });
     }
@@ -34,7 +41,8 @@ function fakeSupabase(tables = {}) {
       }
       if (state.op === 'update') {
         calls.push({ op: 'update', table: state.table, row: state.payload, filters: { ...state.filters } });
-        const updated = { ...(rows[0] || {}), ...state.payload };
+        if (!rows.length) return { data: null, rows: [] };
+        const updated = { ...rows[0], ...state.payload };
         return { data: updated, rows: [updated] };
       }
       if (state.op === 'delete') {
@@ -54,7 +62,12 @@ function fakeSupabase(tables = {}) {
       delete() { state.op = 'delete'; return api; },
       async single() {
         const { data } = resolve();
-        if (!data) return { data: null, error: { message: 'not found' } };
+        // A zero-match update() resolves to null data with no error — that is
+        // what manager-actions.js's `if (!data) return fail(404, ...)` branches
+        // are written to expect (see updateClient). A zero-match select still
+        // reports "not found" as an error, matching PostgREST's real behaviour
+        // for a plain select().single() with no rows.
+        if (!data && state.op !== 'update') return { data: null, error: { message: 'not found' } };
         return { data, error: null };
       },
       then(onOk, onErr) {
