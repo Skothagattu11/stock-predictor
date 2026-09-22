@@ -280,3 +280,23 @@ test('execute reports a failed result for every row beyond the per-proposal cap'
     assert.match(r.error, /limit/i);
   }
 });
+
+// ── Finding 2: an unresolvable ticker is checked at parse but not at execute ─
+// resolveTickers only ran inside parse(). execute()'s per-row check was only
+// validatePlan, which has no ticker rule, so a manager who ticks a red
+// "Could not resolve ticker" row got it written into a real position with the
+// junk symbol intact. The spec and the guide both promise a red row "will be
+// refused when you apply it" — execute() must re-run the same resolution
+// parse() uses and refuse the row when it still doesn't resolve.
+
+test('execute refuses a row whose ticker does not resolve, and never inserts it', async () => {
+  const { service, sb } = svc({ plan: basePlan([]), searchSymbols: async () => [] });
+  const out = await service.execute({ managerId: MANAGER, proposalId: 'prop-10', rows: [
+    { op: 'addPosition', ref: 'a1', dependsOn: null, target: { portfolioId: 'p1' },
+      fields: { symbol: 'ZZZZQQ', entry_price: 10 }, valid: false, problems: ['Could not resolve ticker "ZZZZQQ".'] },
+  ] });
+  assert.equal(out.results[0].ok, false);
+  assert.match(out.results[0].error, /ZZZZQQ/);
+  assert.ok(!sb.calls.some((c) => c.op === 'insert' && c.table === 'portfolio_positions'),
+    'a row with an unresolvable ticker must never reach a write');
+});

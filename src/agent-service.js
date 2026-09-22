@@ -232,6 +232,18 @@ function createAgentService({ sb, adapter, actions, searchSymbols, buildParts })
         continue;
       }
 
+      // validatePlan has no ticker rule — a symbol is only ever checked
+      // against Yahoo/Finnhub search in resolveTickers, which parse() ran but
+      // execute() didn't. Re-run it here so a row the manager ticked despite
+      // a red "Could not resolve ticker" flag is refused, not written with
+      // the unresolved symbol intact.
+      const [resolved] = await resolveTickers([checked]);
+      if (!resolved.valid) {
+        failed.add(row.ref);
+        results.push({ ref: row.ref, op: row.op, ok: false, error: resolved.problems.join(' ') });
+        continue;
+      }
+
       const fn = actions[row.op];
       if (!fn) {
         failed.add(row.ref);
@@ -240,7 +252,7 @@ function createAgentService({ sb, adapter, actions, searchSymbols, buildParts })
       }
 
       const input = {
-        ...row.fields,
+        ...resolved.fields,
         clientId: target.clientId || undefined,
         portfolioId: target.portfolioId || undefined,
         positionId: target.positionId || undefined,

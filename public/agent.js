@@ -173,25 +173,44 @@
     sellPosition: 'Sell position', deletePosition: 'Remove position',
   };
 
+  // A candidate is a client id (see agentPick's data-target="clientId" below)
+  // — look it up in the snapshot render() kept, so the manager sees "Jane
+  // Smith" instead of a 36-character uuid. Falls back to the raw id if the
+  // snapshot has no matching client.
+  function candidateLabel(id) {
+    const clients = current.snapshot && current.snapshot.clients;
+    const client = clients && clients.find((c) => c.id === id);
+    return client ? client.full_name : id;
+  }
+
   function rowHtml(row, i) {
     const cls = !row.valid ? 'bad' : row.confidence < 0.6 ? 'warn' : '';
+    const hasCandidates = Boolean(row.fields && row.fields._candidates);
     const fields = Object.entries(row.fields || {})
       .filter(([k]) => k !== '_candidates')
       .map(([k, v]) => `<label>${esc(k)}
         <input data-row="${i}" data-field="${esc(k)}" value="${esc(v)}" oninput="agentEdit(this)" /></label>`)
       .join('');
 
-    const candidates = row.fields && row.fields._candidates
+    const candidates = hasCandidates
       ? `<label>which record
            <select data-row="${i}" data-target="clientId" onchange="agentPick(this)">
              <option value="">choose…</option>
-             ${String(row.fields._candidates).split(',').map((id) =>
-               `<option value="${esc(id.trim())}">${esc(id.trim())}</option>`).join('')}
+             ${String(row.fields._candidates).split(',').map((raw) => {
+               const id = raw.trim();
+               return `<option value="${esc(id)}">${esc(candidateLabel(id))}</option>`;
+             }).join('')}
            </select></label>`
       : '';
 
+    // row.valid is true for an ambiguous row too — it carries one candidate's
+    // id, picked arbitrarily by the model. Approval must wait for the
+    // manager to actually choose, so a row with an unresolved _candidates
+    // list never starts checked.
+    const checkedAttr = row.valid && !hasCandidates ? 'checked' : '';
+
     return `<div class="agent-row ${cls}">
-      <input type="checkbox" data-check="${i}" ${row.valid ? 'checked' : ''} onchange="agentCount()" />
+      <input type="checkbox" data-check="${i}" ${checkedAttr} onchange="agentCount()" />
       <div class="agent-row-body">
         <div class="agent-op">${esc(VERB[row.op] || row.op)}</div>
         <div class="agent-src">${esc(row.source || row.reasoning || '')}</div>
@@ -202,7 +221,7 @@
   }
 
   function render(out) {
-    current = { proposalId: out.proposalId, rows: out.actions || [] };
+    current = { proposalId: out.proposalId, rows: out.actions || [], snapshot: out.snapshot || null };
     $('agentSummary').textContent = out.plan && out.plan.summary ? out.plan.summary : 'Proposed changes';
     $('agentRows').innerHTML = current.rows.map(rowHtml).join('') ||
       '<div class="agent-row"><div class="agent-row-body">Nothing actionable found in that.</div></div>';

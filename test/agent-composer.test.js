@@ -566,6 +566,85 @@ test('microphone permission denied shows a message and leaves the composer usabl
   assert.equal(calls.length, 1);
 });
 
+// --- Ambiguity flow (Finding 3, UC-4) ---------------------------------------
+// An ambiguous row (the model matched more than one client by name) is
+// `valid: true` because it carries one candidate's id — that's what a plain
+// `row.valid` checkbox default would pre-approve. It must arrive UNCHECKED
+// until the manager explicitly picks a candidate, and the dropdown must show
+// readable names (the snapshot's full_name), not raw 36-character uuids.
+
+test('an ambiguous row arrives unchecked, and its dropdown shows client names, not raw ids', async () => {
+  const parseResponse = {
+    proposalId: 'prop-amb-1',
+    plan: { summary: 'One change', clarification: null, transcript: null },
+    snapshot: { clients: [
+      { id: 'client-uuid-jane-1', full_name: 'Jane Smith' },
+      { id: 'client-uuid-jane-2', full_name: 'Jane Smith' },
+    ], portfolios: [], positions: [] },
+    actions: [{
+      op: 'updateClient', ref: 'a1', target: { clientId: 'client-uuid-jane-1' },
+      fields: { full_name: 'Jane Smith', _candidates: 'client-uuid-jane-1,client-uuid-jane-2' },
+      confidence: 0.4, source: 'set Jane\'s risk profile to aggressive', reasoning: '',
+      valid: true, problems: [],
+    }],
+    errors: [],
+  };
+  const { fetchImpl } = queueJson(parseResponse);
+  const { el, context } = makeSandbox({ fetchImpl });
+
+  el('agentText').value = "set Jane's risk profile to aggressive";
+  el('agentClarify').hidden = true;
+  await context.window.agentSend();
+
+  const html = el('agentRows').innerHTML;
+  assert.equal(el('agentRows')._boxes[0].checked, false, 'an ambiguous row must not arrive pre-approved');
+  assert.ok(!html.includes('client-uuid-jane-1<'), 'raw id must not be used as the visible option label');
+  assert.ok(html.includes('>Jane Smith<'), 'dropdown option must show the matching client\'s full_name');
+
+  // Approval stays blocked until a candidate is picked.
+  context.window.agentCount();
+  assert.equal(el('agentCount').textContent, '0 selected');
+});
+
+test('after picking a candidate and ticking the row, the picked id (not the model\'s default guess) is what gets sent to execute', async () => {
+  const parseResponse = {
+    proposalId: 'prop-amb-2',
+    plan: { summary: 'One change', clarification: null, transcript: null },
+    snapshot: { clients: [
+      { id: 'client-uuid-jane-1', full_name: 'Jane Smith' },
+      { id: 'client-uuid-jane-2', full_name: 'Jane Smith' },
+    ], portfolios: [], positions: [] },
+    actions: [{
+      op: 'updateClient', ref: 'a1', target: { clientId: 'client-uuid-jane-1' },
+      fields: { full_name: 'Jane Smith', _candidates: 'client-uuid-jane-1,client-uuid-jane-2' },
+      confidence: 0.4, source: '', reasoning: '', valid: true, problems: [],
+    }],
+    errors: [],
+  };
+  const { fetchImpl } = queueJson(parseResponse);
+  const { el, context } = makeSandbox({ fetchImpl });
+
+  el('agentText').value = "set Jane's risk profile to aggressive";
+  el('agentClarify').hidden = true;
+  await context.window.agentSend();
+  assert.equal(el('agentRows')._boxes[0].checked, false);
+
+  // The manager picks the second Jane, then manually ticks the row —
+  // agentPick's own logic (unchanged) updates row.target/row.valid; the
+  // checkbox tick is the manager's separate approve gesture, same as any
+  // other row.
+  context.window.agentPick({ dataset: { row: '0', target: 'clientId' }, value: 'client-uuid-jane-2' });
+  el('agentRows')._boxes[0].checked = true;
+
+  const executeResponse = { results: [{ ref: 'a1', op: 'updateClient', ok: true, data: {} }] };
+  const exec = queueJson(executeResponse);
+  context.fetch = exec.fetchImpl;
+  await context.window.agentExecute();
+
+  const sent = JSON.parse(exec.calls[0].opts.body);
+  assert.equal(sent.rows[0].target.clientId, 'client-uuid-jane-2', 'the picked candidate must be what is sent, not the model\'s arbitrary default');
+});
+
 test('the mic stream is released when recording stops normally, and again on pagehide', async () => {
   const { context, micTracks, windowListeners } = makeSandbox();
 
