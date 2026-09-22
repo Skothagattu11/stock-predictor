@@ -234,6 +234,31 @@
       .kpi b{font-size:18px}
       .sum-kpis{grid-template-columns:1fr!important}
     }
+
+    .agent-composer{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--panel);
+      border-top:1px solid var(--line);padding:10px 14px}
+    .agent-input-row{display:flex;gap:8px;max-width:1100px;margin:0 auto}
+    .agent-input-row input{flex:1;background:#0a1220;border:1px solid var(--line);color:var(--text);
+      border-radius:10px;padding:11px 12px;font-size:13px;outline:none}
+    .agent-status{max-width:1100px;margin:6px auto 0;font-size:12px;color:var(--muted);min-height:16px}
+    .agent-clarify{max-width:1100px;margin:0 auto 8px;font-size:13px;color:var(--text);
+      background:#14203a;border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+    .agent-drawer{position:fixed;left:0;right:0;bottom:64px;z-index:39;max-height:56vh;overflow:auto;
+      background:var(--panel);border-top:1px solid var(--line)}
+    .agent-drawer-head,.agent-drawer-foot{display:flex;justify-content:space-between;align-items:center;
+      gap:10px;padding:10px 14px;max-width:1100px;margin:0 auto}
+    .agent-row{max-width:1100px;margin:0 auto;border-top:1px solid var(--line);padding:10px 14px;display:flex;gap:10px}
+    .agent-row.bad{background:rgba(255,90,90,.06)}
+    .agent-row.warn{background:rgba(255,190,80,.06)}
+    .agent-row-body{flex:1}
+    .agent-op{font-weight:700;font-size:13px}
+    .agent-src{font-size:11px;color:var(--muted);margin-top:3px}
+    .agent-problem{font-size:11px;color:var(--red);margin-top:3px}
+    .agent-fields{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+    .agent-fields label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+    .agent-fields input,.agent-fields select{background:#0a1220;border:1px solid var(--line);color:var(--text);
+      border-radius:7px;padding:5px 7px;font-size:12px;min-width:110px}
+    body{padding-bottom:78px}
   </style>
 </head>
 <body>
@@ -383,9 +408,36 @@
     </div>
   </div>
 
+  <!-- ── Agent composer ──────────────────────────────────────────────── -->
+  <div class="agent-drawer" id="agentDrawer" hidden>
+    <div class="agent-drawer-head">
+      <b id="agentSummary">Proposed changes</b>
+      <div>
+        <button class="btn" onclick="agentApproveAll(true)">Approve all</button>
+        <button class="btn" onclick="agentApproveAll(false)">Reject all</button>
+        <button class="btn" onclick="agentClose()">Close</button>
+      </div>
+    </div>
+    <div id="agentRows"></div>
+    <div class="agent-drawer-foot">
+      <span id="agentCount">0 selected</span>
+      <button class="btn primary" id="agentRunBtn" onclick="agentExecute()">Apply selected</button>
+    </div>
+  </div>
+
+  <div class="agent-composer">
+    <div class="agent-clarify" id="agentClarify" hidden></div>
+    <div class="agent-input-row">
+      <input id="agentText" placeholder="Describe a change — &quot;bought 10 NVDA at 182 for Jane&quot;" onkeydown="if(event.key==='Enter')agentSend()" />
+      <button class="btn primary" id="agentSendBtn" onclick="agentSend()">Send</button>
+    </div>
+    <div class="agent-status" id="agentStatus"></div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="manager.js"></script>
+  <script src="agent.js"></script>
 </body>
 </html>

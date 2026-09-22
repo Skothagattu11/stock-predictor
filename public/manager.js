@@ -1006,6 +1006,21 @@
     bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); });
   });
 
+  // ── Agent bridge (Task 6) ────────────────────────────────────────────────
+  // agent.js reads the manager's current selection and, after a successful
+  // execute, asks us to re-fetch so the portal reflects what was applied.
+  window.agentContext = () => ({
+    selectedClientId: selectedClient ? selectedClient.id : null,
+    selectedPortfolioId: selectedPortfolio ? selectedPortfolio.id : null,
+  });
+  window.refreshAfterAgent = async () => {
+    const clientId = selectedClient ? selectedClient.id : null;
+    const portfolioId = selectedPortfolio ? selectedPortfolio.id : null;
+    await loadClients();
+    if (clientId) await selectClient(clientId);
+    if (portfolioId) await selectPortfolio(portfolioId);
+  };
+
   // Init
   loadClients();
 })();

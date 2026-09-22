@@ -1,0 +1,166 @@
+'use strict';
+// Agent composer — turns a description into a reviewable list of changes.
+// Nothing here writes: it posts to /parse, renders rows, and posts the rows the
+// manager approved to /execute.
+
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const token = () => localStorage.getItem('wm_token') || '';
+
+  let current = { proposalId: null, rows: [] };
+  let lastInput = null;     // kept so a clarification answer can resend it
+
+  function status(msg, busy) {
+    $('agentStatus').textContent = msg || '';
+    $('agentSendBtn').disabled = Boolean(busy);
+  }
+
+  async function post(path, body) {
+    const res = await fetch(`/api/manager/agent/${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({ error: 'Bad response' }));
+    if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+    return json;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  const VERB = {
+    createClient: 'Create client', updateClient: 'Update client', deleteClient: 'Delete client',
+    createPortfolio: 'Create portfolio',
+    addPosition: 'Add position', updatePosition: 'Update position',
+    sellPosition: 'Sell position', deletePosition: 'Remove position',
+  };
+
+  function rowHtml(row, i) {
+    const cls = !row.valid ? 'bad' : row.confidence < 0.6 ? 'warn' : '';
+    const fields = Object.entries(row.fields || {})
+      .filter(([k]) => k !== '_candidates')
+      .map(([k, v]) => `<label>${esc(k)}
+        <input data-row="${i}" data-field="${esc(k)}" value="${esc(v)}" oninput="agentEdit(this)" /></label>`)
+      .join('');
+
+    const candidates = row.fields && row.fields._candidates
+      ? `<label>which record
+           <select data-row="${i}" data-target="clientId" onchange="agentPick(this)">
+             <option value="">choose…</option>
+             ${String(row.fields._candidates).split(',').map((id) =>
+               `<option value="${esc(id.trim())}">${esc(id.trim())}</option>`).join('')}
+           </select></label>`
+      : '';
+
+    return `<div class="agent-row ${cls}">
+      <input type="checkbox" data-check="${i}" ${row.valid ? 'checked' : ''} onchange="agentCount()" />
+      <div class="agent-row-body">
+        <div class="agent-op">${esc(VERB[row.op] || row.op)}</div>
+        <div class="agent-src">${esc(row.source || row.reasoning || '')}</div>
+        ${row.problems && row.problems.length ? `<div class="agent-problem">${esc(row.problems.join(' '))}</div>` : ''}
+        <div class="agent-fields">${fields}${candidates}</div>
+      </div>
+    </div>`;
+  }
+
+  function render(out) {
+    current = { proposalId: out.proposalId, rows: out.actions || [] };
+    $('agentSummary').textContent = out.plan && out.plan.summary ? out.plan.summary : 'Proposed changes';
+    $('agentRows').innerHTML = current.rows.map(rowHtml).join('') ||
+      '<div class="agent-row"><div class="agent-row-body">Nothing actionable found in that.</div></div>';
+    $('agentDrawer').hidden = false;
+    agentCount();
+
+    const clar = out.plan && out.plan.clarification;
+    $('agentClarify').hidden = !clar;
+    $('agentClarify').textContent = clar || '';
+    if (out.plan && out.plan.transcript) status(`Heard: “${out.plan.transcript}”`);
+  }
+
+  window.agentEdit = (el) => {
+    const row = current.rows[Number(el.dataset.row)];
+    if (row) row.fields[el.dataset.field] = el.value;
+  };
+
+  window.agentPick = (el) => {
+    const row = current.rows[Number(el.dataset.row)];
+    if (!row) return;
+    row.target = { ...row.target, [el.dataset.target]: el.value };
+    row.valid = Boolean(el.value);
+  };
+
+  window.agentCount = () => {
+    const n = document.querySelectorAll('#agentRows input[data-check]:checked').length;
+    $('agentCount').textContent = `${n} selected`;
+    $('agentRunBtn').disabled = n === 0;
+  };
+
+  window.agentApproveAll = (on) => {
+    document.querySelectorAll('#agentRows input[data-check]').forEach((c) => { c.checked = on; });
+    agentCount();
+  };
+
+  window.agentClose = () => {
+    $('agentDrawer').hidden = true;
+    // Closing also dismisses any pending clarification and drops the resend
+    // context — otherwise the composer would keep treating whatever the
+    // manager types next as an answer to a proposal they just dismissed,
+    // silently merging it onto stale, unrelated input on the next Send.
+    $('agentClarify').hidden = true;
+    lastInput = null;
+  };
+
+  window.agentSend = async () => {
+    const text = $('agentText').value.trim();
+    const clarifying = !$('agentClarify').hidden;
+    if (!text && !clarifying) return;
+
+    // A clarification answer resends the original input with the reply appended,
+    // so the manager never retypes and media is never re-uploaded.
+    const body = clarifying && lastInput
+      ? { ...lastInput, text: `${lastInput.text || ''}\n${text}`.trim() }
+      : { text, context: (window.agentContext ? window.agentContext() : {}) };
+
+    status('Reading…', true);
+    try {
+      const out = await post('parse', body);
+      lastInput = body;
+      $('agentText').value = '';
+      render(out);
+      status('');
+    } catch (err) {
+      status(err.message);       // input is left in the box on purpose
+      $('agentSendBtn').disabled = false;
+    }
+  };
+
+  window.agentExecute = async () => {
+    const picked = [...document.querySelectorAll('#agentRows input[data-check]:checked')]
+      .map((c) => current.rows[Number(c.dataset.check)]);
+    if (!picked.length) return;
+
+    $('agentRunBtn').disabled = true;
+    status('Applying…', true);
+    try {
+      const out = await post('execute', { proposalId: current.proposalId, rows: picked });
+      const ok = out.results.filter((r) => r.ok).length;
+      const bad = out.results.filter((r) => !r.ok);
+
+      $('agentRows').innerHTML = out.results.map((r) =>
+        `<div class="agent-row ${r.ok ? '' : 'bad'}"><div class="agent-row-body">
+           <div class="agent-op">${r.ok ? '✓' : '✕'} ${esc(VERB[r.op] || r.op)}</div>
+           ${r.ok ? '' : `<div class="agent-problem">${esc(r.error)}</div>`}
+         </div></div>`).join('');
+
+      status(`${ok} applied${bad.length ? `, ${bad.length} failed` : ''}`);
+      $('agentRunBtn').disabled = true;
+      if (window.refreshAfterAgent) await window.refreshAfterAgent();
+    } catch (err) {
+      status(err.message);
+      $('agentRunBtn').disabled = false;
+    }
+  };
+})();
