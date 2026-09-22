@@ -96,3 +96,59 @@ test('sellPosition needs a positive sell_price and a known positionId', () => {
   assert.equal(validatePlan(plan([ok]), SNAP).actions[0].valid, true);
   assert.equal(validatePlan(plan([bad]), SNAP).actions[0].valid, false);
 });
+
+test('a prototype-named op is rejected as unknown, not thrown', () => {
+  for (const op of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+    const a = action({ op });
+    const { actions } = validatePlan(plan([a]), SNAP);
+    assert.equal(actions[0].valid, false, `op "${op}" should be invalid`);
+    assert.match(actions[0].problems.join(' '), /Unknown op/);
+  }
+});
+
+test('non-object and malformed action entries do not throw and come back rejected', () => {
+  const { actions } = validatePlan({ actions: [null, 'x', { op: 'bogus' }] }, undefined);
+  assert.equal(actions.length, 3);
+  for (const a of actions) assert.equal(a.valid, false);
+});
+
+test('duplicate ref values are rejected wholesale', () => {
+  const p = plan([
+    action({ ref: 'a1' }),
+    action({
+      ref: 'a1', op: 'createClient',
+      target: { clientId: null, portfolioId: null, positionId: null },
+      fields: { full_name: 'Someone Else' },
+    }),
+  ]);
+  const { actions, errors } = validatePlan(p, SNAP);
+  assert.deepEqual(actions, []);
+  assert.match(errors.join(' '), /a1/);
+});
+
+test('a @ref target must name an action that actually produces that id type', () => {
+  const p = plan([
+    action({ op: 'deleteClient', ref: 'a1', target: { clientId: 'c1', portfolioId: null, positionId: null }, fields: {} }),
+    action({ op: 'createPortfolio', ref: 'a2', dependsOn: 'a1', target: { clientId: '@a1', portfolioId: null, positionId: null }, fields: { name: 'Growth' } }),
+  ]);
+  const { actions } = validatePlan(p, SNAP);
+  assert.equal(actions[1].valid, false);
+  assert.match(actions[1].problems.join(' '), /clientId/);
+});
+
+test('a @ref in positionId is always rejected since no op produces a positionId', () => {
+  const p = plan([
+    action({ op: 'createPortfolio', ref: 'a1', target: { clientId: 'c1', portfolioId: null, positionId: null }, fields: { name: 'Growth' } }),
+    action({ op: 'updatePosition', ref: 'a2', dependsOn: 'a1', target: { clientId: null, portfolioId: null, positionId: '@a1' }, fields: {} }),
+  ]);
+  const { actions } = validatePlan(p, SNAP);
+  assert.equal(actions[1].valid, false);
+  assert.match(actions[1].problems.join(' '), /positionId/);
+});
+
+test('an array value for a numeric field is rejected, not coerced', () => {
+  const a = action({ fields: { symbol: 'AAPL', entry_price: [100] } });
+  const { actions } = validatePlan(plan([a]), SNAP);
+  assert.equal(actions[0].valid, false);
+  assert.match(actions[0].problems.join(' '), /entry_price/);
+});
