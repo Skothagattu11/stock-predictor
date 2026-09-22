@@ -23,10 +23,11 @@ function pickAdapters() {
   return list;
 }
 
-// Try each adapter in order; the first that answers wins. Errors thrown here
-// are tagged isModelError so the route handler can tell "the model failed"
-// (502, safe to summarize to the manager) apart from a bug elsewhere in the
-// service layer (which must not be reported as "Could not read that").
+// Try each adapter in order; the first that answers wins. If every adapter
+// fails, parse() below catches it, retries once, and — even if the retry
+// also fails — swallows the error into a normal 200 result with an `errors`
+// array rather than rethrowing. So a failure here never reaches the route
+// handler as an exception.
 function failoverAdapter(adapters) {
   return {
     name: 'agent-failover',
@@ -36,9 +37,7 @@ function failoverAdapter(adapters) {
         try { return await a.generate(input, schema); }
         catch (err) { last = err; }
       }
-      const err = last || new Error('No LLM provider configured');
-      err.isModelError = true;
-      throw err;
+      throw last || new Error('No LLM provider configured');
     },
   };
 }
@@ -46,10 +45,13 @@ function failoverAdapter(adapters) {
 function createAgentRouter() {
   const router = express.Router();
 
-  // Images and audio arrive as base64 data URLs, so this router needs a larger
-  // body limit than the app-wide 64kb. Scoped here only.
-  router.use(express.json({ limit: '12mb' }));
+  // Auth first: requireAuth only reads the Authorization header, so checking
+  // it before the body parser rejects unauthenticated callers with 401
+  // before the server buffers/parses up to 12mb of JSON on their behalf.
+  // Images and audio arrive as base64 data URLs, so this router needs a
+  // larger body limit than the app-wide 64kb. Scoped here only.
   router.use(requireAuth);
+  router.use(express.json({ limit: '12mb' }));
 
   // Config (and therefore which providers are configured) is fixed for the
   // life of the process, so build the adapters once per router instead of
@@ -78,10 +80,10 @@ function createAgentRouter() {
       const out = await serviceFor().parse({ managerId: req.user.id, text, image, audio, context });
       return res.json(out);
     } catch (err) {
-      if (err.isModelError) return res.status(502).json({ error: `Could not read that: ${err.message}` });
-      // A non-model error here is a bug in the service layer (or a Supabase
-      // failure past the getSupabase() check above) — surface it as a server
-      // error, not as a user-facing "couldn't read your input" parse failure.
+      // parse() itself never throws for a model failure — it catches, retries
+      // once, and returns a normal result with an `errors` array. Anything
+      // that reaches here is an infrastructure failure or a bug, not a model
+      // outage, so it's always a plain server error.
       console.error('[agent] parse failed:', err);
       return res.status(500).json({ error: 'Internal error' });
     }
@@ -97,7 +99,7 @@ function createAgentRouter() {
       return res.json(out);
     } catch (err) {
       console.error('[agent] execute failed:', err);
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: 'Internal error' });
     }
   });
 
