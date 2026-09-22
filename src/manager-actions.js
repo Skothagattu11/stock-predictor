@@ -70,22 +70,24 @@ function createManagerActions({ sb }) {
 
   async function updateClient(managerId, input = {}) {
     if (!input.clientId) return fail(400, 'clientId required');
+    if (!(await ownedClient(managerId, input.clientId))) return fail(404, 'Client not found');
+
     const allowed = ['full_name', 'email', 'phone', 'risk_profile', 'investment_goal', 'notes', 'is_active'];
     const updates = {};
     for (const k of allowed) if (input[k] !== undefined) updates[k] = input[k];
     if (!Object.keys(updates).length) return fail(400, 'no fields to update');
 
     const { data, error } = await sb.from('manager_clients')
-      .update(updates).eq('id', input.clientId).eq('manager_id', managerId).select().single();
+      .update(updates).eq('id', input.clientId).select().single();
     if (error) return fail(500, error.message);
-    if (!data) return fail(404, 'Client not found');
     return done(data);
   }
 
   async function deleteClient(managerId, input = {}) {
     if (!input.clientId) return fail(400, 'clientId required');
-    const { error } = await sb.from('manager_clients')
-      .delete().eq('id', input.clientId).eq('manager_id', managerId);
+    if (!(await ownedClient(managerId, input.clientId))) return fail(404, 'Client not found');
+
+    const { error } = await sb.from('manager_clients').delete().eq('id', input.clientId);
     if (error) return fail(500, error.message);
     return done({ ok: true });
   }

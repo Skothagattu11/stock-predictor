@@ -177,25 +177,15 @@ test('deleteClient deletes an owned client', async () => {
   const actions = createManagerActions({ sb });
   const r = await actions.deleteClient(MANAGER, { clientId: 'c1' });
   assert.equal(r.ok, true);
-  const del = sb.calls.find((c) => c.op === 'delete' && c.table === 'manager_clients');
-  assert.equal(del.filters.id, 'c1');
-  assert.equal(del.filters.manager_id, MANAGER);
+  assert.ok(sb.calls.some((c) => c.op === 'delete' && c.table === 'manager_clients' && c.filters.id === 'c1'));
 });
 
-// deleteClient has no pre-read ownership check like deletePosition/updatePosition
-// do — it relies entirely on the manager_id filter to scope the delete at the DB
-// layer, and Supabase's delete() does not error on zero matched rows. So the
-// property provable here is that the delete is always filtered by the CALLER's
-// manager_id (never the target row's owner) — it can therefore never affect a
-// different manager's client, even though the response is still ok:true.
-test('deleteClient scopes the delete to the calling manager, not the target row owner', async () => {
+test('deleteClient rejects a client belonging to a different manager', async () => {
   const sb = seedWithOtherManager();
   const actions = createManagerActions({ sb });
   const r = await actions.deleteClient(MANAGER, { clientId: 'c2' }); // c2 belongs to OTHER
-  assert.equal(r.ok, true);
-  const del = sb.calls.find((c) => c.op === 'delete' && c.table === 'manager_clients');
-  assert.equal(del.filters.id, 'c2');
-  assert.equal(del.filters.manager_id, MANAGER);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 404);
 });
 
 // ── createPortfolio ─────────────────────────────────────────────────────
