@@ -71,6 +71,96 @@
     document.getElementById('agentAttach').hidden = true;
   };
 
+  let recorder = null;
+  let chunks = [];
+  let recordedAudio = null;   // data URL
+  let activeStream = null;    // the getUserMedia stream for the live mic session, so any exit path can release it
+  let micBusy = false;        // true from the getUserMedia prompt through onstop — blocks a re-entrant tap from starting a second recorder
+
+  const MAX_RECORD_MS = 120000;   // a 2-minute cap; past that it is a document, not a note
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onerror = () => reject(new Error('Could not read the recording'));
+      r.onload = () => resolve(r.result);
+      r.readAsDataURL(blob);
+    });
+  }
+
+  // Stops the mic stream (if any) and resets recording state/UI. Called from
+  // every exit path — normal stop, the 2-minute cap, a recorder error, a
+  // failed getUserMedia/MediaRecorder call, and page unload — so a stream
+  // never outlives its session and leaks the browser's mic indicator.
+  function releaseMic() {
+    if (activeStream) activeStream.getTracks().forEach((t) => t.stop());
+    activeStream = null;
+    micBusy = false;
+    const btn = document.getElementById('agentMic');
+    if (btn) { btn.classList.remove('recording'); btn.disabled = false; }
+  }
+
+  window.addEventListener('pagehide', releaseMic);
+
+  window.agentMic = async () => {
+    const btn = document.getElementById('agentMic');
+
+    if (recorder && recorder.state === 'recording') {
+      recorder.stop();
+      return;
+    }
+
+    // Blocks a second tap while the permission prompt is in flight, or in the
+    // brief window between calling stop() and onstop actually firing —
+    // otherwise a fast double-tap could spin up two recorders on one stream.
+    if (micBusy) return;
+
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      status('This browser cannot record audio — type the note instead.');
+      return;
+    }
+
+    micBusy = true;
+    btn.disabled = true;
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (_) {
+      releaseMic();
+      status('Microphone permission denied — type the note instead.');
+      return;
+    }
+    activeStream = stream;
+    btn.disabled = false;
+
+    chunks = [];
+    try {
+      recorder = new MediaRecorder(stream);
+    } catch (_) {
+      releaseMic();
+      status('Could not start recording — type the note instead.');
+      return;
+    }
+    recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    recorder.onstop = async () => {
+      const finishedRecorder = recorder;
+      releaseMic();
+      try {
+        recordedAudio = await blobToDataUrl(new Blob(chunks, { type: finishedRecorder.mimeType || 'audio/webm' }));
+        status('Recorded — press Send.');
+      } catch (err) { status(err.message); }
+    };
+    recorder.onerror = () => {
+      releaseMic();
+      status('Recording failed — type the note instead.');
+    };
+
+    recorder.start();
+    btn.classList.add('recording');
+    status('Recording… tap the mic again to stop.');
+    setTimeout(() => { if (recorder && recorder.state === 'recording') recorder.stop(); }, MAX_RECORD_MS);
+  };
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -161,13 +251,13 @@
   window.agentSend = async () => {
     const text = $('agentText').value.trim();
     const clarifying = !$('agentClarify').hidden;
-    if (!text && !attached && !clarifying) return;
+    if (!text && !attached && !recordedAudio && !clarifying) return;
 
     // A clarification answer resends the original input with the reply appended,
     // so the manager never retypes and media is never re-uploaded.
     const body = clarifying && lastInput
       ? { ...lastInput, text: `${lastInput.text || ''}\n${text}`.trim() }
-      : { text, image: attached, context: (window.agentContext ? window.agentContext() : {}) };
+      : { text, image: attached, audio: recordedAudio, context: (window.agentContext ? window.agentContext() : {}) };
 
     status('Reading…', true);
     try {
@@ -175,6 +265,7 @@
       lastInput = body;
       $('agentText').value = '';
       agentClearAttach();
+      recordedAudio = null;
       render(out);
       status('');
     } catch (err) {

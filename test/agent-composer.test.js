@@ -47,7 +47,41 @@ class FakeFileReader {
   }
 }
 
-function makeSandbox({ fetchImpl } = {}) {
+// --- Voice input fakes -------------------------------------------------
+// Inert stand-ins for the mic pipeline, in the same spirit as FakeImage/
+// FakeFileReader above: just enough for agentMic()'s real control flow (the
+// re-entrancy guard, the stop/cleanup paths, the data reaching agentSend) to
+// run through the actual agent.js code. They do NOT simulate real audio
+// capture, encoding, or MediaRecorder's timing/state-transition quirks.
+let fakeRecorderInstances = 0;
+class FakeMediaRecorder {
+  constructor(stream) {
+    this.stream = stream;
+    this.state = 'inactive';
+    fakeRecorderInstances += 1;
+    // A unique mimeType per instance so a test can tell two separate
+    // recordings' resulting data URLs apart.
+    this.mimeType = `audio/webm;take=${fakeRecorderInstances}`;
+  }
+  start() { this.state = 'recording'; }
+  stop() {
+    this.state = 'inactive';
+    if (this.ondataavailable) this.ondataavailable({ data: { size: 10 } });
+    if (this.onstop) this.onstop();
+  }
+}
+class FakeBlob {
+  constructor(_parts, opts) { this.type = (opts && opts.type) || ''; }
+}
+function flush(n = 3) {
+  // Lets queued microtasks (e.g. the async onstop handler's continuation
+  // past its own `await`) settle before the test inspects state.
+  let p = Promise.resolve();
+  for (let i = 1; i < n; i += 1) p = p.then(() => {});
+  return p;
+}
+
+function makeSandbox({ fetchImpl, getUserMediaImpl } = {}) {
   const elements = new Map();
   function el(id, tagName) {
     if (!elements.has(id)) {
@@ -58,11 +92,18 @@ function makeSandbox({ fetchImpl } = {}) {
         set(v) { this._html = v; if (id === 'agentRows') this._boxes = parseCheckboxes(v); },
       });
       rec._boxes = [];
+      const classes = new Set();
+      rec.classList = {
+        add: (c) => classes.add(c),
+        remove: (c) => classes.delete(c),
+        contains: (c) => classes.has(c),
+      };
       elements.set(id, rec);
     }
     return elements.get(id);
   }
   const listeners = {};
+  const windowListeners = {};
   let modalOpen = false;
   let activeElement = null;
   const document = {
@@ -85,6 +126,13 @@ function makeSandbox({ fetchImpl } = {}) {
       };
     },
   };
+  const micTracks = [];
+  const defaultGetUserMedia = async () => {
+    const track = { stopped: false };
+    track.stop = () => { track.stopped = true; };
+    micTracks.push(track);
+    return { getTracks: () => [track] };
+  };
   const calls = [];
   const context = {
     document,
@@ -93,6 +141,13 @@ function makeSandbox({ fetchImpl } = {}) {
     console,
     Image: FakeImage,
     FileReader: FakeFileReader,
+    navigator: { mediaDevices: { getUserMedia: getUserMediaImpl || defaultGetUserMedia } },
+    MediaRecorder: FakeMediaRecorder,
+    Blob: FakeBlob,
+    addEventListener: (type, handler) => { windowListeners[type] = handler; },
+    // Inert: agent.js only uses this for the 2-minute recording cap, which no
+    // test exercises. A real timer would keep the test process alive.
+    setTimeout: () => {},
   };
   // agent.js does `window.foo = ...` and then calls bare `foo()` elsewhere
   // (e.g. render() calls `agentCount()` directly) — exactly like a browser,
@@ -104,7 +159,7 @@ function makeSandbox({ fetchImpl } = {}) {
   context.window.agentContext = () => ({ selectedClientId: 'c1', selectedPortfolioId: 'p1' });
   vm.runInContext(SRC, context, { filename: 'agent.js' });
   return {
-    context, el, calls, listeners,
+    context, el, calls, listeners, windowListeners, micTracks,
     setModalOpen: (v) => { modalOpen = v; },
     setActiveElement: (elOrNull) => { activeElement = elOrNull; },
   };
@@ -369,4 +424,163 @@ test('paste-to-attach is ignored when focus is in a non-composer text input, and
   listeners.paste(pasteEvent);
   await Promise.resolve();
   assert.equal(el('agentAttach').hidden, false, 'a paste while focus is in #agentText should still attach');
+});
+
+// --- Voice input -------------------------------------------------------
+// The real recording/encoding pipeline (MediaRecorder timing, codec choice)
+// cannot be exercised without a real browser and mic — see FakeMediaRecorder
+// above and the task report. These tests cover the data-flow through the
+// real agentMic()/agentSend() code: the re-entrancy guard, the mic-stream
+// cleanup paths, and how a recording rides into and is cleared from /parse.
+
+test('a recorded note rides the /parse body and is cleared after a successful send', async () => {
+  const parseResponse = {
+    proposalId: 'prop-audio-1',
+    plan: { summary: 'One change', clarification: null, transcript: 'bought some shares' },
+    actions: [],
+    errors: [],
+  };
+  const { fetchImpl, calls } = queueJson(parseResponse);
+  const { el, context } = makeSandbox({ fetchImpl });
+
+  await context.window.agentMic(); // tap: start recording
+  assert.equal(el('agentMic').classList.contains('recording'), true, 'mic button must show it is recording');
+
+  await context.window.agentMic(); // tap again: stop
+  await flush();
+  assert.equal(el('agentMic').classList.contains('recording'), false);
+  assert.match(el('agentStatus').textContent, /Recorded/);
+
+  el('agentText').value = '';
+  el('agentClarify').hidden = true;
+  await context.window.agentSend();
+
+  assert.equal(calls.length, 1);
+  const sent = JSON.parse(calls[0].opts.body);
+  assert.match(sent.audio, /^data:audio\/webm;take=\d+;base64,ZmFrZQ==$/, 'the recorded data URL must ride the /parse body');
+
+  // Cleared after a successful send — a further Send with nothing else
+  // queued must not fire another /parse call.
+  calls.length = 0;
+  await context.window.agentSend();
+  assert.equal(calls.length, 0, 'recordedAudio must be cleared after a successful send');
+});
+
+test('a failed parse leaves the recorded audio in place for a retry', async () => {
+  const { fetchImpl: failFetch } = queueJson({ error: 'model unavailable' }, false);
+  const { el, context } = makeSandbox({ fetchImpl: failFetch });
+
+  const take = fakeRecorderInstances + 1; // this test's recording, whatever the shared counter is at
+  await context.window.agentMic();
+  await context.window.agentMic();
+  await flush();
+
+  el('agentText').value = '';
+  el('agentClarify').hidden = true;
+  await context.window.agentSend();
+  assert.match(el('agentStatus').textContent, /model unavailable/);
+
+  // Retry — no new recording is made — must resend the same audio.
+  const ok = queueJson({ proposalId: 'p', plan: { summary: '', clarification: null, transcript: null }, actions: [], errors: [] });
+  context.fetch = ok.fetchImpl;
+  await context.window.agentSend();
+
+  assert.equal(ok.calls.length, 1);
+  const sent = JSON.parse(ok.calls[0].opts.body);
+  assert.match(sent.audio, new RegExp(`take=${take};`), 'a failed send must preserve the recording for retry, not drop it');
+});
+
+test('a clarification answer resends the original recording, not a newly recorded one', async () => {
+  const clarifyResponse = {
+    proposalId: null,
+    plan: { summary: '', clarification: 'Which client did you mean?', transcript: 'sold some NVDA' },
+    actions: [],
+    errors: [],
+  };
+  const { fetchImpl } = queueJson(clarifyResponse);
+  const { el, context } = makeSandbox({ fetchImpl });
+
+  const firstTake = fakeRecorderInstances + 1;
+  await context.window.agentMic();
+  await context.window.agentMic();
+  await flush();
+
+  el('agentText').value = 'sold some NVDA';
+  el('agentClarify').hidden = true;
+  await context.window.agentSend();
+  assert.equal(el('agentClarify').hidden, false);
+
+  // Manager records again while answering the clarification — this new
+  // recording must be ignored in favor of the original.
+  const secondTake = fakeRecorderInstances + 1;
+  await context.window.agentMic();
+  await context.window.agentMic();
+  await flush();
+
+  const answer = queueJson({ proposalId: 'p2', plan: { summary: '', clarification: null, transcript: null }, actions: [], errors: [] });
+  context.fetch = answer.fetchImpl;
+  el('agentText').value = 'Jane Smith';
+  await context.window.agentSend();
+
+  const sent = JSON.parse(answer.calls[0].opts.body);
+  assert.match(sent.audio, new RegExp(`take=${firstTake};`), 'clarification answer must resend the ORIGINAL recording');
+  assert.doesNotMatch(sent.audio, new RegExp(`take=${secondTake};`), 'must not pick up the recording made while answering');
+});
+
+test('a double tap during the permission prompt does not spin up two recorders', async () => {
+  let resolveGUM;
+  const { el, context } = makeSandbox({
+    getUserMediaImpl: () => new Promise((resolve) => { resolveGUM = resolve; }),
+  });
+  const before = fakeRecorderInstances;
+
+  const p1 = context.window.agentMic(); // tap 1 — permission prompt pending
+  await Promise.resolve();
+  assert.equal(el('agentMic').disabled, true, 'button should be disabled while the permission prompt is pending');
+
+  const p2 = context.window.agentMic(); // tap 2 — must be a no-op, not a second prompt
+  await p2;
+
+  resolveGUM({ getTracks: () => [{ stop: () => {} }] });
+  await p1;
+
+  assert.equal(fakeRecorderInstances - before, 1, 'only one MediaRecorder must be created from a double tap');
+});
+
+test('microphone permission denied shows a message and leaves the composer usable', async () => {
+  const { el, context } = makeSandbox({
+    getUserMediaImpl: async () => { throw new Error('NotAllowedError'); },
+  });
+
+  await context.window.agentMic();
+  assert.match(el('agentStatus').textContent, /permission denied/i);
+  assert.equal(el('agentMic').classList.contains('recording'), false);
+  assert.equal(el('agentMic').disabled, false, 'the mic button must be usable again, not stuck disabled');
+
+  // The composer keeps working via typed text.
+  const { fetchImpl, calls } = queueJson({ proposalId: 'p', plan: { summary: '', clarification: null, transcript: null }, actions: [], errors: [] });
+  context.fetch = fetchImpl;
+  el('agentText').value = 'typed instead';
+  el('agentClarify').hidden = true;
+  await context.window.agentSend();
+  assert.equal(calls.length, 1);
+});
+
+test('the mic stream is released when recording stops normally, and again on pagehide', async () => {
+  const { context, micTracks, windowListeners } = makeSandbox();
+
+  await context.window.agentMic();
+  assert.equal(micTracks.length, 1);
+  assert.equal(micTracks[0].stopped, false);
+  await context.window.agentMic(); // stop
+  await flush();
+  assert.equal(micTracks[0].stopped, true, 'the stream must be released when recording ends normally');
+
+  // A second, still-live recording must also be released if the manager
+  // navigates away mid-recording.
+  await context.window.agentMic();
+  assert.equal(micTracks[1].stopped, false);
+  assert.equal(typeof windowListeners.pagehide, 'function', 'agent.js must register a pagehide listener to release the mic');
+  windowListeners.pagehide();
+  assert.equal(micTracks[1].stopped, true, 'navigating away mid-recording must not leave the mic stream open');
 });
