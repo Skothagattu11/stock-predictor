@@ -49,9 +49,9 @@ class FakeFileReader {
 
 function makeSandbox({ fetchImpl } = {}) {
   const elements = new Map();
-  function el(id) {
+  function el(id, tagName) {
     if (!elements.has(id)) {
-      const rec = { id, hidden: false, disabled: false, value: '', _text: '', _html: '' };
+      const rec = { id, tagName: tagName || '', hidden: false, disabled: false, value: '', _text: '', _html: '' };
       Object.defineProperty(rec, 'textContent', { get() { return this._text; }, set(v) { this._text = v; } });
       Object.defineProperty(rec, 'innerHTML', {
         get() { return this._html; },
@@ -64,8 +64,10 @@ function makeSandbox({ fetchImpl } = {}) {
   }
   const listeners = {};
   let modalOpen = false;
+  let activeElement = null;
   const document = {
     getElementById: (id) => el(id),
+    get activeElement() { return activeElement; },
     querySelectorAll: (selector) => {
       const boxes = el('agentRows')._boxes;
       return selector.includes(':checked') ? boxes.filter((b) => b.checked) : boxes.slice();
@@ -104,6 +106,7 @@ function makeSandbox({ fetchImpl } = {}) {
   return {
     context, el, calls, listeners,
     setModalOpen: (v) => { modalOpen = v; },
+    setActiveElement: (elOrNull) => { activeElement = elOrNull; },
   };
 }
 
@@ -281,6 +284,18 @@ test('an attached screenshot rides into the /parse body and is cleared after a s
   assert.equal(el('agentAttach').hidden, true, 'attachment strip must clear after a successful send');
 });
 
+test('an over-25MB file is rejected before it reaches the canvas, with a message the manager sees', async () => {
+  const { el, context } = makeSandbox();
+  el('agentAttach').hidden = true; // fake element defaults to false; real markup starts `hidden`
+
+  const oversized = { size: 25 * 1024 * 1024 + 1, type: 'image/png' };
+  await context.window.agentAttach({ files: [oversized], value: '' });
+
+  assert.equal(el('agentAttach').hidden, true, 'an oversized file must not attach');
+  assert.match(el('agentStatus').textContent, /too large/i);
+  assert.match(el('agentStatus').textContent, /25MB/);
+});
+
 test('a clarification answer reuses the original request and ignores a newly (re)attached image', async () => {
   const clarifyResponse = {
     proposalId: null,
@@ -331,4 +346,27 @@ test('paste-to-attach is ignored while a modal is open, and works once none is',
   listeners.paste(pasteEvent);
   await Promise.resolve();
   assert.equal(el('agentAttach').hidden, false, 'a paste with no modal open should attach normally');
+});
+
+test('paste-to-attach is ignored when focus is in a non-composer text input, and works when focus is in #agentText', async () => {
+  const { el, listeners, setActiveElement } = makeSandbox();
+  el('agentAttach').hidden = true;
+
+  const imageItem = { type: 'image/png', getAsFile: () => ({ size: 1000, type: 'image/png' }) };
+  const pasteEvent = { clipboardData: { items: [imageItem] } };
+
+  // Focus in #clientSearch (a real non-modal input in manager.html) — the
+  // image must not attach behind the manager's back.
+  const clientSearch = el('clientSearch', 'INPUT');
+  setActiveElement(clientSearch);
+  listeners.paste(pasteEvent);
+  await Promise.resolve();
+  assert.equal(el('agentAttach').hidden, true, 'a paste while focus is in another text input must not attach to the composer');
+
+  // Focus in the composer's own #agentText — this is the intended gesture.
+  const agentText = el('agentText', 'INPUT');
+  setActiveElement(agentText);
+  listeners.paste(pasteEvent);
+  await Promise.resolve();
+  assert.equal(el('agentAttach').hidden, false, 'a paste while focus is in #agentText should still attach');
 });

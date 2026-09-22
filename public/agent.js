@@ -210,12 +210,25 @@
     }
   };
 
+  // True when focus sits in some other text-entry element (an <input>,
+  // <textarea>, or contenteditable) that isn't the composer's own #agentText
+  // — pasting an image there should behave like the ordinary paste that
+  // element expects, not silently attach to the composer sitting behind it.
+  function focusElsewhere() {
+    const el = document.activeElement;
+    if (!el || el.id === 'agentText') return false;
+    const tag = (el.tagName || '').toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || Boolean(el.isContentEditable);
+  }
+
   // Ctrl+V a screenshot straight into the composer. Guarded against open
-  // modals (client/portfolio/position/sell) so pasting into one of their
-  // text fields can't silently attach an image to the agent composer
-  // sitting behind it.
+  // modals (client/portfolio/position/sell) and against any other text entry
+  // (e.g. #clientSearch) having focus, so pasting into a field elsewhere on
+  // the page can't silently attach an image to the agent composer sitting
+  // behind it.
   document.addEventListener('paste', (e) => {
     if (document.querySelector('.modal-bg.open')) return;
+    if (focusElsewhere()) return;
     const item = [...(e.clipboardData ? e.clipboardData.items : [])].find((i) => i.type.startsWith('image/'));
     if (!item) return;
     const file = item.getAsFile();
