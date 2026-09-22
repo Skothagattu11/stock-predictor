@@ -26,6 +26,51 @@
     return json;
   }
 
+  let attached = null;    // data URL of the downscaled image
+
+  const MAX_EDGE = 1568;  // beyond this the model gains nothing and you pay for it
+  const MAX_FILE_BYTES = 25 * 1024 * 1024; // guard a huge/accidental file before it ever hits the canvas
+
+  function downscale(file) {
+    return new Promise((resolve, reject) => {
+      if (file.size > MAX_FILE_BYTES) {
+        reject(new Error('That image is too large (25MB max) — try a smaller screenshot.'));
+        return;
+      }
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read that file'));
+      reader.onload = () => { img.src = reader.result; };
+      img.onerror = () => reject(new Error('That does not look like an image'));
+      img.onload = () => {
+        const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', 0.8));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  window.agentAttach = async (el) => {
+    const file = el.files && el.files[0];
+    el.value = '';
+    if (!file) return;
+    try {
+      attached = await downscale(file);
+      document.getElementById('agentThumb').src = attached;
+      document.getElementById('agentAttach').hidden = false;
+      status('Screenshot attached — add a note if you like, then Send.');
+    } catch (err) { status(err.message); }
+  };
+
+  window.agentClearAttach = () => {
+    attached = null;
+    document.getElementById('agentAttach').hidden = true;
+  };
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -116,19 +161,20 @@
   window.agentSend = async () => {
     const text = $('agentText').value.trim();
     const clarifying = !$('agentClarify').hidden;
-    if (!text && !clarifying) return;
+    if (!text && !attached && !clarifying) return;
 
     // A clarification answer resends the original input with the reply appended,
     // so the manager never retypes and media is never re-uploaded.
     const body = clarifying && lastInput
       ? { ...lastInput, text: `${lastInput.text || ''}\n${text}`.trim() }
-      : { text, context: (window.agentContext ? window.agentContext() : {}) };
+      : { text, image: attached, context: (window.agentContext ? window.agentContext() : {}) };
 
     status('Reading…', true);
     try {
       const out = await post('parse', body);
       lastInput = body;
       $('agentText').value = '';
+      agentClearAttach();
       render(out);
       status('');
     } catch (err) {
@@ -163,4 +209,22 @@
       $('agentRunBtn').disabled = false;
     }
   };
+
+  // Ctrl+V a screenshot straight into the composer. Guarded against open
+  // modals (client/portfolio/position/sell) so pasting into one of their
+  // text fields can't silently attach an image to the agent composer
+  // sitting behind it.
+  document.addEventListener('paste', (e) => {
+    if (document.querySelector('.modal-bg.open')) return;
+    const item = [...(e.clipboardData ? e.clipboardData.items : [])].find((i) => i.type.startsWith('image/'));
+    if (!item) return;
+    const file = item.getAsFile();
+    if (!file) return;
+    downscale(file).then((url) => {
+      attached = url;
+      document.getElementById('agentThumb').src = url;
+      document.getElementById('agentAttach').hidden = false;
+      status('Screenshot pasted — press Send.');
+    }).catch((err) => status(err.message));
+  });
 })();

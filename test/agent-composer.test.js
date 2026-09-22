@@ -23,6 +23,30 @@ function parseCheckboxes(html) {
   return boxes;
 }
 
+// Minimal, deliberately-inert stand-ins for the browser image pipeline.
+// These do NOT simulate real decoding or resizing — they just let
+// downscale() run to completion in Node so the *surrounding* logic (does the
+// resulting data URL reach the POST body? does it get cleared? does a
+// clarification answer avoid re-sending it?) is exercised through the real
+// agent.js code path. The actual MAX_EDGE/canvas scaling math is untested
+// here — see the task report for why that needs a real browser.
+let fakeDataUrlCounter = 0;
+class FakeImage {
+  set src(v) {
+    this._src = v;
+    this.width = 800;
+    this.height = 600;
+    if (this.onload) this.onload();
+  }
+  get src() { return this._src; }
+}
+class FakeFileReader {
+  readAsDataURL(file) {
+    this.result = `data:${(file && file.type) || 'application/octet-stream'};base64,ZmFrZQ==`;
+    if (this.onload) this.onload();
+  }
+}
+
 function makeSandbox({ fetchImpl } = {}) {
   const elements = new Map();
   function el(id) {
@@ -38,11 +62,25 @@ function makeSandbox({ fetchImpl } = {}) {
     }
     return elements.get(id);
   }
+  const listeners = {};
+  let modalOpen = false;
   const document = {
     getElementById: (id) => el(id),
     querySelectorAll: (selector) => {
       const boxes = el('agentRows')._boxes;
       return selector.includes(':checked') ? boxes.filter((b) => b.checked) : boxes.slice();
+    },
+    querySelector: (selector) => (selector === '.modal-bg.open' && modalOpen ? {} : null),
+    addEventListener: (type, handler) => { listeners[type] = handler; },
+    createElement: (tag) => {
+      if (tag !== 'canvas') throw new Error(`unexpected createElement(${tag})`);
+      fakeDataUrlCounter += 1;
+      const n = fakeDataUrlCounter;
+      return {
+        width: 0, height: 0,
+        getContext: () => ({ drawImage: () => {} }),
+        toDataURL: () => `data:image/jpeg;base64,fakeimage${n}`,
+      };
     },
   };
   const calls = [];
@@ -51,6 +89,8 @@ function makeSandbox({ fetchImpl } = {}) {
     localStorage: { getItem: () => 'tok' },
     fetch: fetchImpl || (async () => ({ ok: true, status: 200, json: async () => ({}) })),
     console,
+    Image: FakeImage,
+    FileReader: FakeFileReader,
   };
   // agent.js does `window.foo = ...` and then calls bare `foo()` elsewhere
   // (e.g. render() calls `agentCount()` directly) — exactly like a browser,
@@ -61,7 +101,10 @@ function makeSandbox({ fetchImpl } = {}) {
   context.window = context;
   context.window.agentContext = () => ({ selectedClientId: 'c1', selectedPortfolioId: 'p1' });
   vm.runInContext(SRC, context, { filename: 'agent.js' });
-  return { context, el, calls };
+  return {
+    context, el, calls, listeners,
+    setModalOpen: (v) => { modalOpen = v; },
+  };
 }
 
 function queueJson(body, ok = true) {
@@ -205,4 +248,87 @@ test('closing the drawer drops the pending clarification so the next Send starts
   const sentBody = JSON.parse(unrelated.calls[0].opts.body);
   assert.equal(sentBody.text, 'delete the AAPL position for Bob');
   assert.ok(!sentBody.text.includes('NVDA'), 'must not silently merge onto the dismissed proposal\'s text');
+});
+
+// --- Image input -----------------------------------------------------------
+// downscale() itself (the canvas resize: MAX_EDGE scaling, JPEG q0.8) cannot
+// be exercised without a real DOM/canvas and is NOT covered here — see
+// FakeImage/FakeFileReader above and the task report. These tests only cover
+// the data-flow around whatever data URL downscale() produces.
+
+test('an attached screenshot rides into the /parse body and is cleared after a successful send', async () => {
+  const parseResponse = {
+    proposalId: 'prop-img-1',
+    plan: { summary: 'One change', clarification: null, transcript: null },
+    actions: [],
+    errors: [],
+  };
+  const { fetchImpl, calls } = queueJson(parseResponse);
+  const { el, context } = makeSandbox({ fetchImpl });
+
+  await context.window.agentAttach({ files: [{ size: 1000, type: 'image/png' }], value: '' });
+  assert.equal(el('agentAttach').hidden, false, 'attach strip should show once downscale resolves');
+  const thumb = el('agentThumb').src;
+  assert.match(thumb, /^data:image\/jpeg;base64,/);
+
+  el('agentText').value = '';
+  el('agentClarify').hidden = true;
+  await context.window.agentSend();
+
+  const sent = JSON.parse(calls[0].opts.body);
+  assert.equal(sent.image, thumb, 'the downscaled data URL must be the one sent');
+
+  assert.equal(el('agentAttach').hidden, true, 'attachment strip must clear after a successful send');
+});
+
+test('a clarification answer reuses the original request and ignores a newly (re)attached image', async () => {
+  const clarifyResponse = {
+    proposalId: null,
+    plan: { summary: '', clarification: 'Which client did you mean?', transcript: null },
+    actions: [],
+    errors: [],
+  };
+  const { fetchImpl } = queueJson(clarifyResponse);
+  const { el, context } = makeSandbox({ fetchImpl });
+
+  await context.window.agentAttach({ files: [{ size: 1000, type: 'image/png' }], value: '' });
+  const firstImage = el('agentThumb').src;
+  el('agentText').value = 'bought some shares';
+  el('agentClarify').hidden = true;
+  await context.window.agentSend();
+  assert.equal(el('agentClarify').hidden, false);
+  assert.equal(el('agentAttach').hidden, true, 'attachment clears even though this send produced a clarification');
+
+  // Manager attaches a *different* screenshot while answering the clarification.
+  await context.window.agentAttach({ files: [{ size: 1000, type: 'image/png' }], value: '' });
+  const secondImage = el('agentThumb').src;
+  assert.notEqual(secondImage, firstImage, 'sanity check: the two fake attachments differ');
+
+  const answer = queueJson({ proposalId: 'p2', plan: { summary: '', clarification: null, transcript: null }, actions: [], errors: [] });
+  context.fetch = answer.fetchImpl;
+  el('agentText').value = 'Jane Smith';
+  await context.window.agentSend();
+
+  const sent = JSON.parse(answer.calls[0].opts.body);
+  assert.equal(sent.image, firstImage, 'clarification answer must resend the ORIGINAL image, not the newly attached one');
+  assert.notEqual(sent.image, secondImage);
+});
+
+test('paste-to-attach is ignored while a modal is open, and works once none is', async () => {
+  const { el, listeners, setModalOpen } = makeSandbox();
+  assert.equal(typeof listeners.paste, 'function', 'agent.js must register a document paste listener');
+  el('agentAttach').hidden = true; // the fake element defaults to false; real markup starts `hidden`
+
+  const imageItem = { type: 'image/png', getAsFile: () => ({ size: 1000, type: 'image/png' }) };
+  const pasteEvent = { clipboardData: { items: [imageItem] } };
+
+  setModalOpen(true);
+  listeners.paste(pasteEvent);
+  await Promise.resolve(); // let any (unexpected) downscale microtask settle
+  assert.equal(el('agentAttach').hidden, true, 'a paste while a modal is open must not attach to the agent composer');
+
+  setModalOpen(false);
+  listeners.paste(pasteEvent);
+  await Promise.resolve();
+  assert.equal(el('agentAttach').hidden, false, 'a paste with no modal open should attach normally');
 });
