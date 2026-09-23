@@ -1,6 +1,6 @@
 'use strict';
 
-const { ActionPlanSchema, validatePlan, MAX_ACTIONS, OPS } = require('./agent-schema');
+const { ActionPlanSchema, LlmActionPlanSchema, normalizePlan, validatePlan, MAX_ACTIONS, OPS } = require('./agent-schema');
 
 // The agent layer. Produces proposals; never writes. Writes go through the
 // injected `actions` (src/manager-actions.js), which is also what the HTTP
@@ -20,8 +20,20 @@ function systemPrompt(snapshot, context) {
     '- If you cannot tell which client or portfolio is meant, return no actions and',
     '  set "clarification" to the single question that would resolve it.',
     '- If a name is ambiguous, still propose the action but set confidence below 0.6',
-    '  and list the candidate ids in fields._candidates as a comma-separated string.',
+    '  and add a field with key "_candidates" whose value is the candidate ids, comma-separated.',
+    '- "fields" is a LIST of {key, value} entries — e.g. [{"key":"full_name","value":"Jane Doe"}].',
     '- "source" must quote the words or describe the part of the image each action came from.',
+    '',
+    'FIELD NAMES — use exactly these keys, no synonyms (not "quantity", not "price"):',
+    '  createClient:    full_name (required), email, phone, risk_profile, investment_goal, notes',
+    '  updateClient:    any of the createClient fields, plus is_active',
+    '  createPortfolio: name (required), color, strategy',
+    '  addPosition:     symbol (required), entry_price (required), shares, avg_cost,',
+    '                   target_sell_price, stop_loss_price, note',
+    '  updatePosition:  entry_price, shares, avg_cost, target_sell_price, stop_loss_price, note',
+    '  sellPosition:    sell_price (required), note',
+    '  deleteClient / deletePosition: no fields',
+    '  entry_price is the price paid per share; shares is the number of shares.',
     `- At most ${MAX_ACTIONS} actions.`,
     '- If audio was provided, put what you heard in "transcript".',
     '',
@@ -112,21 +124,24 @@ function createAgentService({ sb, adapter, actions, searchSymbols, buildParts })
 
     async function ask(extra) {
       const input = toParts({ prompt: extra ? `${prompt}\n\n${extra}` : prompt, image, audio });
-      return adapter.generate(input, ActionPlanSchema);
+      // LlmActionPlanSchema, not ActionPlanSchema: the model is asked for
+      // fields as a key/value list, because Gemini silently returns {} for an
+      // open-ended map. normalizePlan folds it back. See agent-schema.js.
+      return adapter.generate(input, LlmActionPlanSchema);
     }
 
     let plan;
     try {
-      plan = ActionPlanSchema.parse(await ask());
+      plan = ActionPlanSchema.parse(normalizePlan(await ask()));
     } catch (err) {
       // One retry with the validator's complaint appended, then give up
       // cleanly rather than loop or throw — a second schema failure is a
       // parse-time result (empty actions + an error), not an uncaught
       // exception that would 500 the request.
       try {
-        plan = ActionPlanSchema.parse(
+        plan = ActionPlanSchema.parse(normalizePlan(
           await ask(`Your previous reply did not match the required schema: ${err.message}. Reply with valid JSON only.`)
-        );
+        ));
       } catch (err2) {
         return {
           proposalId: null,

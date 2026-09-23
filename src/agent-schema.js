@@ -34,6 +34,42 @@ const ActionPlanSchema = z.object({
   transcript: z.string().nullable().default(null),
 });
 
+// ── The wire schema ────────────────────────────────────────────────────────
+// Gemini's structured output cannot express an open-ended map: a z.record()
+// field comes back as {} — silently, with no error, so every field value is
+// lost while the response still looks well-formed. Verified against
+// gemini-3.6-flash. So the model is asked for a key/value LIST, which every
+// provider handles, and normalizePlan() folds it back into the object shape
+// the rest of the system already expects. Nothing downstream changes.
+const LlmActionPlanSchema = z.object({
+  actions: z.array(ActionSchema.omit({ fields: true }).extend({
+    fields: z.array(z.object({
+      key: z.string(),
+      value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+    })).default([]),
+  })).default([]),
+  clarification: z.string().nullable().default(null),
+  summary: z.string().default(''),
+  transcript: z.string().nullable().default(null),
+});
+
+// Wire shape -> internal shape. Tolerates a model that already returned an
+// object (another provider, or a future Gemini that supports maps).
+function normalizePlan(raw) {
+  if (!raw || !Array.isArray(raw.actions)) return raw;
+  return {
+    ...raw,
+    actions: raw.actions.map((a) => {
+      if (!a || !Array.isArray(a.fields)) return a;
+      const fields = {};
+      for (const entry of a.fields) {
+        if (entry && typeof entry.key === 'string' && entry.key) fields[entry.key] = entry.value;
+      }
+      return { ...a, fields };
+    }),
+  };
+}
+
 // Which target ids each op needs, and which fields are mandatory.
 const RULES = {
   createClient:    { needs: [],              required: ['full_name'] },
@@ -175,4 +211,4 @@ function validatePlan(plan, snapshot) {
   return { actions: validated, errors };
 }
 
-module.exports = { OPS, MAX_ACTIONS, ActionSchema, ActionPlanSchema, validatePlan };
+module.exports = { OPS, MAX_ACTIONS, ActionSchema, ActionPlanSchema, LlmActionPlanSchema, normalizePlan, validatePlan };
