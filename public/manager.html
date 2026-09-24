@@ -261,6 +261,11 @@
     .agent-fields label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
     .agent-fields input,.agent-fields select{background:#0a1220;border:1px solid var(--line);color:var(--text);
       border-radius:7px;padding:5px 7px;font-size:12px;min-width:110px}
+    /* An author `display` beats the UA's [hidden]{display:none}, so any element
+       given a display here would stay visible while hidden — .agent-attach did
+       exactly that and showed a broken <img> permanently. Keep this rule above
+       the agent styles; it makes the hidden attribute reliable for all of them. */
+    [hidden]{display:none!important}
     .agent-attach{max-width:1100px;margin:8px auto 0;display:flex;align-items:center;gap:10px}
     .agent-attach img{height:46px;border-radius:8px;border:1px solid var(--line)}
     #agentMic.recording{background:var(--red);color:#fff}

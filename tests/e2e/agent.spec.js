@@ -112,3 +112,22 @@ test('a flagged row is unchecked and shows why', async ({ page }) => {
   await expect(page.locator('input[data-check="0"]')).not.toBeChecked();
   await expect(page.locator('#agentRunBtn')).toBeDisabled();
 });
+
+// The attach bar and the drawer are shown/hidden via the `hidden` attribute.
+// An author `display` rule beats the UA's [hidden]{display:none}, so
+// .agent-attach{display:flex} once left a permanently visible bar holding an
+// <img> with no src — a broken-image icon parked in the composer. Assert the
+// hidden attribute actually hides, for every element that relies on it.
+test('elements hidden by the hidden attribute are really hidden', async ({ page }) => {
+  await signIn(page);
+  await stubClients(page);
+  await page.goto('/manager.html');
+
+  for (const sel of ['#agentAttach', '#agentDrawer', '#agentClarify']) {
+    const el = page.locator(sel);
+    await expect(el, `${sel} carries the hidden attribute`).toHaveAttribute('hidden', '');
+    await expect(el, `${sel} must not be visible while hidden`).toBeHidden();
+  }
+  // The preview img must never render without a source.
+  await expect(page.locator('#agentThumb')).toBeHidden();
+});
