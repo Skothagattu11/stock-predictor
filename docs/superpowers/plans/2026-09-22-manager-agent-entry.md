@@ -23,7 +23,9 @@
 - **Provider:** `gemini-2.5-flash` via `config.GEMINI_MODEL`. Never hardcode a model id in service code.
 - **Plan size cap:** 25 actions per proposal.
 - **Image cap:** longest edge 1568 px, JPEG quality 0.8, downscaled client-side.
-- **Existing behaviour must not change.** `npm test` passes at every commit.
+- **No user-visible behaviour change.** Input validation may be tightened where the
+  agent executor will need it (see Task 1); response shapes and status codes reachable
+  from the existing UI stay as they are. `npm test` passes at every commit.
 
 ## Deviations from the spec
 
@@ -63,7 +65,15 @@ Two, both recorded here so the spec and the code don't silently disagree:
 
 ### Task 1: Extract `manager-actions.js`
 
-Pure refactor. No agent code, no behaviour change. Ends with the existing test suite and the existing portal both still working.
+Structural refactor. No agent code. Ends with the existing test suite and the existing portal both still working.
+
+**On behaviour:** the extraction deliberately tightens input validation as it goes —
+`sell_price` and `entry_price` must be positive numbers, an empty client update is
+rejected, and `gain_pct` guards against a zero entry price. These paths are unreachable
+from the current UI (`public/manager.js:974` already blocks a non-positive sell price),
+but they become load-bearing in Task 3, where the executor's caller is a language model
+rather than a form. Response shapes are otherwise preserved; `sellPosition` additionally
+returns `symbol`, which no existing caller reads.
 
 **Files:**
 - Create: `src/manager-actions.js`

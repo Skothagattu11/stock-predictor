@@ -6,6 +6,14 @@ const { getSupabase } = require('./supabase');
 
 function createManagerRouter() {
   const router = express.Router();
+  const { createManagerActions } = require('./manager-actions');
+
+  // Map an action result onto the HTTP response.
+  function send(res, result, okStatus = 200) {
+    if (!result.ok) return res.status(result.code).json({ error: result.error });
+    return res.status(okStatus).json(result.data);
+  }
+  const actionsFor = () => createManagerActions({ sb: getSupabase() });
 
   // ── Auth: sign in (proxy to Supabase so anon key stays server-side) ─────
   router.post('/auth/login', async (req, res) => {
@@ -120,24 +128,8 @@ function createManagerRouter() {
     return res.json(data);
   });
 
-  router.post('/clients', async (req, res) => {
-    const sb = getSupabase();
-    const { full_name, email, phone, risk_profile, investment_goal, notes } = req.body || {};
-    if (!full_name) return res.status(400).json({ error: 'full_name required' });
-
-    const { data, error } = await sb.from('manager_clients').insert({
-      manager_id: req.user.id,
-      full_name,
-      email: email || null,
-      phone: phone || null,
-      risk_profile: risk_profile || 'moderate',
-      investment_goal: investment_goal || null,
-      notes: notes || null,
-    }).select().single();
-
-    if (error) return res.status(500).json({ error: error.message });
-    return res.status(201).json(data);
-  });
+  router.post('/clients', async (req, res) =>
+    send(res, await actionsFor().createClient(req.user.id, req.body || {}), 201));
 
   router.get('/clients/:id', async (req, res) => {
     const sb = getSupabase();
@@ -150,30 +142,11 @@ function createManagerRouter() {
     return res.json(data);
   });
 
-  router.put('/clients/:id', async (req, res) => {
-    const sb = getSupabase();
-    const allowed = ['full_name', 'email', 'phone', 'risk_profile', 'investment_goal', 'notes', 'is_active'];
-    const updates = {};
-    for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
+  router.put('/clients/:id', async (req, res) =>
+    send(res, await actionsFor().updateClient(req.user.id, { ...req.body, clientId: req.params.id })));
 
-    const { data, error } = await sb.from('manager_clients')
-      .update(updates)
-      .eq('id', req.params.id)
-      .eq('manager_id', req.user.id)
-      .select().single();
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json(data);
-  });
-
-  router.delete('/clients/:id', async (req, res) => {
-    const sb = getSupabase();
-    const { error } = await sb.from('manager_clients')
-      .delete()
-      .eq('id', req.params.id)
-      .eq('manager_id', req.user.id);
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json({ ok: true });
-  });
+  router.delete('/clients/:id', async (req, res) =>
+    send(res, await actionsFor().deleteClient(req.user.id, { clientId: req.params.id })));
 
   // ── Portfolios ────────────────────────────────────────────────────────────
 
@@ -192,24 +165,8 @@ function createManagerRouter() {
     return res.json(data);
   });
 
-  router.post('/clients/:clientId/portfolios', async (req, res) => {
-    const sb = getSupabase();
-    const { data: client } = await sb.from('manager_clients')
-      .select('id').eq('id', req.params.clientId).eq('manager_id', req.user.id).single();
-    if (!client) return res.status(404).json({ error: 'Client not found' });
-
-    const { name, color, strategy } = req.body || {};
-    if (!name) return res.status(400).json({ error: 'name required' });
-
-    const { data, error } = await sb.from('client_portfolios').insert({
-      client_id: req.params.clientId,
-      name,
-      color: color || '#5b8cff',
-      strategy: strategy || null,
-    }).select().single();
-    if (error) return res.status(500).json({ error: error.message });
-    return res.status(201).json(data);
-  });
+  router.post('/clients/:clientId/portfolios', async (req, res) =>
+    send(res, await actionsFor().createPortfolio(req.user.id, { ...req.body, clientId: req.params.clientId }), 201));
 
   router.get('/portfolios/:id', async (req, res) => {
     const sb = getSupabase();
@@ -239,115 +196,21 @@ function createManagerRouter() {
 
   // ── Positions ─────────────────────────────────────────────────────────────
 
-  router.post('/portfolios/:portfolioId/positions', async (req, res) => {
-    const sb = getSupabase();
-    // Verify portfolio ownership
-    const { data: pf } = await sb.from('client_portfolios')
-      .select('id, manager_clients!inner(manager_id)')
-      .eq('id', req.params.portfolioId)
-      .eq('manager_clients.manager_id', req.user.id)
-      .single();
-    if (!pf) return res.status(404).json({ error: 'Portfolio not found' });
+  router.post('/portfolios/:portfolioId/positions', async (req, res) =>
+    send(res, await actionsFor().addPosition(req.user.id, { ...req.body, portfolioId: req.params.portfolioId }), 201));
 
-    const { symbol, shares, avg_cost, entry_price, target_sell_price, stop_loss_price, note } = req.body || {};
-    if (!symbol || !entry_price) return res.status(400).json({ error: 'symbol and entry_price required' });
-
-    const { data: pos, error } = await sb.from('portfolio_positions').insert({
-      portfolio_id: req.params.portfolioId,
-      symbol: symbol.toUpperCase(),
-      shares: shares ? Number(shares) : null,
-      avg_cost: avg_cost ? Number(avg_cost) : null,
-      entry_price: Number(entry_price),
-      target_sell_price: target_sell_price ? Number(target_sell_price) : null,
-      stop_loss_price: stop_loss_price ? Number(stop_loss_price) : null,
-      note: note || null,
-    }).select().single();
-    if (error) return res.status(500).json({ error: error.message });
-
-    // Write BUY history event
-    await sb.from('position_history').insert({
-      position_id: pos.id,
-      portfolio_id: req.params.portfolioId,
-      symbol: pos.symbol,
-      event_type: 'BUY',
-      price: pos.entry_price,
-      shares: pos.shares,
-      total_value: pos.shares ? pos.shares * pos.entry_price : null,
-      note: note || null,
-    });
-
-    return res.status(201).json(pos);
-  });
-
-  router.put('/positions/:id', async (req, res) => {
-    const sb = getSupabase();
-    const { data: pos } = await sb.from('portfolio_positions')
-      .select('id, portfolio_id, symbol, entry_price, client_portfolios!inner(manager_clients!inner(manager_id))')
-      .eq('id', req.params.id)
-      .eq('client_portfolios.manager_clients.manager_id', req.user.id)
-      .single();
-    if (!pos) return res.status(404).json({ error: 'Position not found' });
-
-    const allowed = ['entry_price', 'shares', 'avg_cost', 'target_sell_price', 'stop_loss_price', 'note'];
-    const updates = { updated_at: new Date().toISOString() };
-    for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
-
-    const { data, error } = await sb.from('portfolio_positions')
-      .update(updates).eq('id', req.params.id).select().single();
-    if (error) return res.status(500).json({ error: error.message });
-
-    // Write REBALANCE event — use updated entry_price if changed, else original
-    const rebalancePrice = req.body.entry_price ?? pos.entry_price;
-    const rebalanceShares = req.body.shares ?? pos.shares;
-    await sb.from('position_history').insert({
-      position_id: pos.id,
-      portfolio_id: pos.portfolio_id,
-      symbol: pos.symbol,
-      event_type: 'REBALANCE',
-      price: rebalancePrice,
-      shares: rebalanceShares,
-      total_value: rebalanceShares ? rebalanceShares * rebalancePrice : null,
-      note: req.body.note || 'Position updated',
-    });
-
-    return res.json(data);
-  });
+  router.put('/positions/:id', async (req, res) =>
+    send(res, await actionsFor().updatePosition(req.user.id, { ...req.body, positionId: req.params.id })));
 
   router.delete('/positions/:id', async (req, res) => {
-    const sb = getSupabase();
-    const { data: pos } = await sb.from('portfolio_positions')
-      .select('id, portfolio_id, symbol, entry_price, shares, client_portfolios!inner(manager_clients!inner(manager_id))')
-      .eq('id', req.params.id)
-      .eq('client_portfolios.manager_clients.manager_id', req.user.id)
-      .single();
-    if (!pos) return res.status(404).json({ error: 'Position not found' });
-
-    // delete_only = true means remove the entry without recording a SELL event
-    if (!req.body.delete_only) {
-      const sellPrice = Number(req.body.sell_price) || pos.entry_price;
-      const gainPct = ((sellPrice - pos.entry_price) / pos.entry_price) * 100;
-
-      await sb.from('position_history').insert({
-        position_id: pos.id,
-        portfolio_id: pos.portfolio_id,
-        symbol: pos.symbol,
-        event_type: 'SELL',
-        price: sellPrice,
-        shares: pos.shares,
-        total_value: pos.shares ? pos.shares * sellPrice : null,
-        gain_pct: gainPct,
-        note: req.body.note || null,
-      });
-
-      const { error } = await sb.from('portfolio_positions').delete().eq('id', req.params.id);
-      if (error) return res.status(500).json({ error: error.message });
-      return res.json({ ok: true, gain_pct: gainPct });
+    const managerId = req.user.id;
+    const a = actionsFor();
+    if (req.body && req.body.delete_only) {
+      return send(res, await a.deletePosition(managerId, { positionId: req.params.id }));
     }
-
-    // Plain delete — no history event
-    const { error } = await sb.from('portfolio_positions').delete().eq('id', req.params.id);
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json({ ok: true });
+    return send(res, await a.sellPosition(managerId, {
+      positionId: req.params.id, sell_price: req.body && req.body.sell_price, note: req.body && req.body.note,
+    }));
   });
 
   // ── Position history ──────────────────────────────────────────────────────

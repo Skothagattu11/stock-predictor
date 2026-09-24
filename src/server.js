@@ -89,6 +89,12 @@ async function fetchSeedPrice(symbol) {
 
 const app = express();
 app.set('trust proxy', true); // correct client IP behind Render's proxy (rate limiting)
+
+// ── Agent entry — mounted BEFORE the 64kb global parser because it carries
+//    base64 images and audio. It brings its own 12mb parser, scoped to itself.
+const { createAgentRouter } = require('./agent-routes');
+app.use('/api/manager/agent', createAgentRouter());
+
 app.use(express.json({ limit: '64kb' })); // cap request body size
 app.use('/api', createRouter());
 
